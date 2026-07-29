@@ -1,0 +1,16 @@
+{
+  "turns": [
+    {
+      "message": "what is in this image?",
+      "attachments": [
+        {
+          "filename": "blue-square.png",
+          "content_type": "image/png",
+          "base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAeklEQVR4nO3PUQkAIBTAwBfHiIY1jCH8OITBAtxm7fN1wwUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1oQQNa0IAWNKAFDWhBA1rQgBY0oAUNaEEDWtCAFjSgBQ1oQQNa0IAWPHYBhBLBWprx9KEAAAAASUVORK5CYII="
+        }
+      ],
+      "expected_attachment_statuses": ["ready"],
+      "provider_response": "It looks like a plain blue square."
+    }
+  ]
+}

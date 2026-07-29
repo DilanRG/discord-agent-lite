@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.release-work/
+data/*.db
+data/*.db-*
+logs/*
+characters/*
+!characters/README.md
+!data/.gitkeep
+!logs/.gitkeep

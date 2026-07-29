@@ -1,0 +1,47 @@
+{
+  "purpose": "scripted_handler_plumbing_only",
+  "turns": [
+    {
+      "message": "hello",
+      "provider_response": "hey! what's up?"
+    },
+    {
+      "message": "oh",
+      "reply_to_last": true,
+      "provider_response": "lol, fair reaction. what's up?"
+    },
+    {
+      "message": "why did you greet me twice back to back?",
+      "reply_to_last": true,
+      "provider_response": "I shouldn't have. I lost the thread and treated your follow-up like a new conversation—my bad."
+    },
+    {
+      "message": "what does this attachment say?",
+      "reply_to_last": true,
+      "attachments": [
+        {
+          "filename": "notes.txt",
+          "content_type": "text/plain",
+          "text": "Project codename: cobalt. Next milestone: Thursday."
+        }
+      ],
+      "expected_attachment_statuses": ["ready"],
+      "provider_response": "It says the project codename is cobalt and the next milestone is Thursday."
+    },
+    {
+      "message": "what are you up to?",
+      "reply_to_last": true,
+      "provider_response": "just sorting a few things out. you?"
+    },
+    {
+      "message": "that sounds made up",
+      "reply_to_last": true,
+      "provider_response": "fair. I was being vague."
+    },
+    {
+      "message": "can you say that without turning it into a speech?",
+      "reply_to_last": true,
+      "provider_response": "yeah, I was sorting things out."
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+[Unit]
+Description=Discord Agent Lite
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=discordbot
+Group=discordbot
+WorkingDirectory=/opt/discord-agent-lite
+EnvironmentFile=/etc/discord-agent-lite.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=MALLOC_ARENA_MAX=2
+ExecStart=/opt/discord-agent-lite/run.sh
+Restart=on-failure
+RestartSec=8
+TimeoutStopSec=20
+KillSignal=SIGINT
+
+# Guardrails; tune after observing /agent status on your VM.
+MemoryHigh=90M
+MemoryMax=120M
+TasksMax=64
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/discord-agent-lite/data /var/lib/discord-agent-lite/logs
+
+[Install]
+WantedBy=multi-user.target
