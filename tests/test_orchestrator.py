@@ -116,9 +116,14 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("OPENING MESSAGE EXAMPLE", system)
         self.assertNotIn("FRAMEWORK", system)
         self.assertNotIn(self.character.post_history_instructions, system)
-        self.assertIn("your next Discord message", post_history)
+        self.assertIn("your next discord message", post_history.casefold())
         self.assertNotIn("character's next", post_history)
-        self.assertTrue(post_history.endswith(self.character.post_history_instructions))
+        self.assertIn(self.character.post_history_instructions, post_history)
+        self.assertTrue(post_history.endswith("dialogue for anyone else."))
+        self.assertLess(
+            post_history.index(self.character.post_history_instructions),
+            post_history.index("Your next Discord message"),
+        )
         self.assertEqual(call["max_tokens"], self.settings.provider_max_tokens)
         self.assertEqual(call["temperature"], 0.80)
         self.assertEqual(result, "hey @everyone")
@@ -629,15 +634,21 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
             observations=(),
             journal_entry="I want to bring the tournament idea back up.",
         )
-        core, provider = self.core("still thinking about that tournament thing")
+        core, provider = self.core(
+            "Community server\n\n---\n\n"
+            "@Example Agent has joined the voice channel chat.\n\n"
+            "---\n\nstill thinking about that tournament thing"
+        )
         result = await core.proactive_message("g:1:c:10")
         call = provider.calls[-1]
         self.assertIn("PROACTIVE DISCORD TURN", str(call["user_prompt"]))
         self.assertIn("tournament idea", str(call["user_prompt"]))
         self.assertTrue(str(call["system_prompt"]).startswith(self.character.system_prompt.replace("{{char}}", self.character.name)))
-        self.assertTrue(str(call["post_history"]).endswith(self.character.post_history_instructions))
+        self.assertIn(self.character.post_history_instructions, str(call["post_history"]))
+        self.assertTrue(str(call["post_history"]).endswith("dialogue for anyone else."))
         self.assertEqual(call["task"], "chat")
-        self.assertIn("tournament", result)
+        self.assertEqual(call["max_tokens"], 96)
+        self.assertEqual(result, "still thinking about that tournament thing")
         await core.close()
 
     async def test_empty_sanitized_output_fails_without_a_quality_retry(self) -> None:

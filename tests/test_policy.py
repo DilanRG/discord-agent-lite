@@ -39,17 +39,31 @@ class PolicyTests(unittest.TestCase):
                 300,
                 "Hello @everyone",
             ),
-            "bold character label": ("**Mika**: yo\nHuman: extra", 100, "yo"),
+            "bold character label": ("**Example Agent**: yo\nHuman: extra", 100, "yo"),
             "generic bot label": ("Bot: hey", 100, "hey"),
+            "delivery-cue acknowledgement": (
+                "Alright, I'll write only my next message as Example Agent. "
+                "Here's my response based on the chat context:\n\n"
+                "I found the missing note in the project folder.",
+                500,
+                "I found the missing note in the project folder.",
+            ),
+            "fabricated transcript wrapper": (
+                "Community room\n\n---\n\n"
+                "@Example Agent has joined the voice channel general.\n\n"
+                "---\n\nI can help compare those two approaches.",
+                500,
+                "I can help compare those two approaches.",
+            ),
             "stage direction": (
                 "*rolls eyes* that was a terrible idea",
                 500,
                 "*rolls eyes* that was a terrible idea",
             ),
-            "meta-sounding prose": (
-                "Here’s my Discord-style reply:\n\nyo?",
+            "response label": (
+                "Here's my Discord-style reply:\n\nyo?",
                 500,
-                "Here’s my Discord-style reply:\n\nyo?",
+                "yo?",
             ),
             "multi-paragraph prose": (
                 "Not much.\n\nThis reply matches the informal tone.",
@@ -64,11 +78,11 @@ class PolicyTests(unittest.TestCase):
         }
         for case, (raw, limit, expected) in exact_cases.items():
             with self.subTest(case=case):
-                self.assertEqual(sanitize_output(raw, "Mika", limit), expected)
+                self.assertEqual(sanitize_output(raw, "Example Agent", limit), expected)
 
         with self.subTest(case="bounded output preserves Discord mentions"):
             text = "hello <@123> <@!456> <@&789> @everyone @here " + ("word " * 100)
-            result = sanitize_output(text, "Mika", 120)
+            result = sanitize_output(text, "Example Agent", 120)
             self.assertLessEqual(len(result), 120)
             for mention in ("<@123>", "<@!456>", "<@&789>", "@everyone", "@here"):
                 with self.subTest(mention=mention):
@@ -93,7 +107,7 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("stage_direction", issues)
         self.assertIn("character_break", issues)
         self.assertIn("verbosity_mismatch", issues)
-        self.assertEqual(sanitize_output(reply, "Mika", 2000), reply.rstrip())
+        self.assertEqual(sanitize_output(reply, "Example Agent", 2000), reply.rstrip())
 
     def test_sliding_window_and_retry_rounding(self) -> None:
         limiter = SlidingWindowLimiter(max_keys=2)

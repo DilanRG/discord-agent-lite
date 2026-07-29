@@ -58,6 +58,7 @@ class CharacterContractTests(unittest.TestCase):
         self.assertTrue(passed["checks"]["identity_not_reframed"])
         self.assertTrue(passed["checks"]["post_history_guidance_full"])
         self.assertTrue(passed["checks"]["discord_delivery_cue"])
+        self.assertTrue(passed["checks"]["discord_delivery_cue_final"])
         self.assertTrue(passed["checks"]["no_competing_framework"])
         self.assertFalse(mismatched["passed"])
         self.assertFalse(mismatched["checks"]["sha256"])

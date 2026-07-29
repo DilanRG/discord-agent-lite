@@ -6,10 +6,12 @@
 - Treat only explicit Discord mentions, including replies whose `@` toggle is on, as guaranteed direct admission. Replies with `@` off and ordinary messages use the configured ambient probability path.
 - Keep conversation-memory controls separate from privately viewable and deletable agent-owned social continuity. Social state has no opt-out and cannot alter permissions, moderation, admission, blacklists, rate limits, or concurrency policy.
 - Retain schema compatibility for historical attachment-cache, FTS, and guild-continuity tables while leaving those heavier lanes dormant in the accepted 80/20 runtime.
-- Preserve structural output sanitation only: transport/control leakage and forged role continuations are removed, while character prose, actions, mentions, and style remain model/card-owned.
+- Preserve structural output sanitation: transport/control leakage and forged role continuations are removed; tightly recognized acknowledgement or fabricated transcript envelopes are unwrapped without applying a semantic character-quality gate.
+- Keep reactive and proactive generation silent in Discord. Proactivity runs hourly by default, requires 12 hours of stored participant idleness, and cannot chain another bot-initiated turn until a participant has spoken again.
+- Pin Discord library logging above gateway DEBUG so raw message payloads cannot enter the application log.
 - Exclude all operator character cards, credentials, runtime databases, logs, deployment evidence, and private release history from the public repository. Tests and offline resource probes generate short synthetic cards in temporary directories.
 
 ### Validation
 
 - The public source tree passes the complete unit suite, deterministic prompt-boundary and attachment fuzzing, manifest verification, compilation/static checks, and the under-100 MiB offline resource gate.
-- Live Discord, Horde, reflection, attachment, typing, and proactive behavior were validated privately before publication; private identifiers and operational evidence are intentionally not published.
+- Live Discord, Horde, reflection, attachment, and proactive behavior were validated privately before publication; private identifiers and operational evidence are intentionally not published.

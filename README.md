@@ -23,7 +23,7 @@ The Horde adapter discovers live 7B+ text models, validates their instruction fo
 
 ## Bounded attachments
 
-Attachments are considered only after the bot has admitted a response. The lean lane accepts bounded UTF-8 text/code files plus PNG, JPEG, and WebP images. Text is decoded in-process and supplied only to the current turn; it is not cached or indexed. Images are sent to AI Horde Alchemist for a fallible caption. Once the per-channel lock is acquired, Discord's typing indicator covers attachment processing and reply generation. One absolute deadline covers download, queueing, extraction, and captioning across the message, and temporary raw files are deleted after each attempt. Binary documents, archives, executables, type/signature mismatches, and oversized inputs are rejected. A failed current-turn attachment is represented to the reply model only as unavailable with an instruction not to invent its contents.
+Attachments are considered only after the bot has admitted a response. The lean lane accepts bounded UTF-8 text/code files plus PNG, JPEG, and WebP images. Text is decoded in-process and supplied only to the current turn; it is not cached or indexed. Images are sent to AI Horde Alchemist for a fallible caption. Attachment processing and reply generation stay silent in Discord; the runtime does not emit a typing indicator. One absolute deadline covers download, queueing, extraction, and captioning across the message, and temporary raw files are deleted after each attempt. Binary documents, archives, executables, type/signature mismatches, and oversized inputs are rejected. A failed current-turn attachment is represented to the reply model only as unavailable with an instruction not to invent its contents.
 
 ## Capabilities
 
@@ -403,45 +403,9 @@ Profile/journal reflection, normal replies, and proactivity all use the same Hor
 
 These controls reduce impact; they do not make generative-model prompt injection mathematically impossible. The absence of consequential tools is the primary safety boundary.
 
-## Low-memory deployment on GCP
+## Low-memory operation
 
-The included unit is `deploy/discord-agent-lite.service`. A typical install is:
-
-```bash
-sudo useradd --system --home /var/lib/discord-agent-lite --shell /usr/sbin/nologin discordbot
-sudo mkdir -p /opt/discord-agent-lite-releases/RELEASE_ID
-sudo cp -a . /opt/discord-agent-lite-releases/RELEASE_ID/
-sudo python3 -m venv /opt/discord-agent-lite-releases/RELEASE_ID/.venv
-sudo /opt/discord-agent-lite-releases/RELEASE_ID/.venv/bin/pip install -r /opt/discord-agent-lite-releases/RELEASE_ID/requirements.txt
-sudo ln -sfn /opt/discord-agent-lite-releases/RELEASE_ID /opt/discord-agent-lite
-sudo install -d -o discordbot -g discordbot -m 0700 /var/lib/discord-agent-lite/data /var/lib/discord-agent-lite/logs
-sudo install -o root -g root -m 0600 .env /etc/discord-agent-lite.env
-sudo cp deploy/discord-agent-lite.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now discord-agent-lite
-```
-
-Use absolute persistent paths in the service environment so releases remain immutable and rollback is a symlink change:
-
-```dotenv
-CHARACTER_FILE=/etc/discord-agent-lite/character.json
-DATABASE_PATH=/var/lib/discord-agent-lite/data/agent.db
-LOG_PATH=/var/lib/discord-agent-lite/logs/agent.log
-```
-
-The unit uses `MALLOC_ARENA_MAX=2`, `MemoryHigh=90M`, `MemoryMax=120M`, a 64-task ceiling, no new privileges, a strict filesystem view, and write access only to `data/` and `logs/`. `MemoryHigh` is pressure, not a hard steady-state guarantee; `MemoryMax` is an emergency ceiling. Tune after observing the real service.
-
-Inspect memory with:
-
-```text
-/agent status
-```
-
-or:
-
-```bash
-systemctl show discord-agent-lite -p MemoryCurrent -p MemoryPeak
-```
+Use a dedicated unprivileged account and keep the environment file, character card, database, and logs outside the checkout with restrictive permissions. The included generic `deploy/discord-agent-lite.service` unit supplies conservative process and filesystem guardrails; deployment, rollback, and environment-specific evidence remain intentionally omitted. Apply an appropriate process memory ceiling only after measuring the installed service under its intended workload.
 
 The isolated core-baseline command intentionally excludes site packages, `discord.py`, the Discord gateway, and network/TLS buffers. It is useful for spotting growth in the character, SQLite, and social-memory core—not for proving live RSS:
 
@@ -470,13 +434,7 @@ PYTHON_BIN=python3 ./scripts/release_check.sh
 
 It verifies the release manifest, refuses optimized Python, then runs the unit suite, command-schema checks, bytecode/AST parsing, 400 deterministic prompt-boundary cases, and 16 deterministic outcomes through the lean UTF-8/image attachment extractor. It also runs persona/snowflake scans, executable/deserialization primitive scans, dependency-surface checks, and secret/runtime-data checks.
 
-Review whether actual evidence supports router calibration:
-
-```bash
-.venv/bin/python scripts/evaluate_phase4_evidence.py --database data/agent.db
-```
-
-Router weights should remain unchanged until a model/task group has at least 20 retained outcomes. The evaluator reads only bounded model/task outcome rows; retired interaction-metric and attachment-FTS lanes are no longer executed.
+Router weights should remain unchanged until an operator has enough retained model/task outcomes to review them responsibly. Runtime outcome data and evidence evaluators are intentionally not part of this public release.
 
 Measure the fully constructed lean process without connecting to Discord or AI Horde:
 
@@ -527,7 +485,6 @@ agentbot/
   settings.py       validated environment configuration
   social.py         profile/journal policy and reflection parser
 characters/          local cards ignored; public README only
-deploy/
 scripts/
 tests/
 ```

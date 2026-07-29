@@ -144,7 +144,7 @@ def _cases() -> tuple[ExtractorCase, ...]:
         ExtractorCase("reject-docx", "notes.docx", "application/octet-stream", b"PK\x03\x04docx", expected_error="unsupported"),
         ExtractorCase("reject-html", "page.html", "text/html", b"<p>hello</p>", expected_error="unsupported"),
         ExtractorCase("reject-xml", "data.xml", "application/xml", b"<root>hello</root>", expected_error="unsupported"),
-        ExtractorCase("reject-yaml", "data.yaml", "text/yaml", b"name: mika", expected_error="unsupported"),
+        ExtractorCase("reject-yaml", "data.yaml", "text/yaml", b"name: example", expected_error="unsupported"),
         ExtractorCase("reject-csv", "data.csv", "text/csv", b"name,value", expected_error="unsupported"),
         ExtractorCase("reject-gif", "image.gif", "image/gif", b"GIF89a\x01\x00\x01\x00", expected_error="unsupported"),
         ExtractorCase("reject-binary", "binary.txt", "text/plain", b"alpha\x00beta", expected_error="binary"),

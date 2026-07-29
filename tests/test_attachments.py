@@ -122,7 +122,7 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
             (b"PK\x03\x04docx", "notes.docx", "application/octet-stream", "unsupported"),
             (b"<p>hello</p>", "page.html", "text/html", "unsupported"),
             (b"<root>hello</root>", "data.xml", "application/xml", "unsupported"),
-            (b"name: mika", "data.yaml", "text/yaml", "unsupported"),
+            (b"name: example", "data.yaml", "text/yaml", "unsupported"),
             (b"name,value", "data.csv", "text/csv", "unsupported"),
             (b"%PDF-1.7", "disguised.txt", "text/plain", "binary"),
             (b"not utf8: \xff", "notes.txt", "text/plain", "encoding"),

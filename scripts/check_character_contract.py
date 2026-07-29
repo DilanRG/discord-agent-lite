@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from agentbot.character import Character, load_character
-from agentbot.orchestrator import AgentCore
+from agentbot.orchestrator import AgentCore, _DISCORD_DELIVERY_CUE
 
 
 def _prompt_core(
@@ -104,7 +104,7 @@ def evaluate_character_contract(
             not rendered_system or rendered_system in prompt for prompt in prompts
         ),
         "post_history_guidance_full": all(
-            not rendered_post_history or post.endswith(rendered_post_history)
+            not rendered_post_history or rendered_post_history in post
             for post in post_prompts
         ),
         "normal_examples_full": not rendered_examples or rendered_examples in normal_prompt,
@@ -122,9 +122,12 @@ def evaluate_character_contract(
             "OPENING MESSAGE EXAMPLE" not in proactive_prompt
         ),
         "discord_delivery_cue": all(
-            "your next Discord message" in post
+            "your next discord message" in post.casefold()
             and "character's next" not in post
             for post in post_prompts
+        ),
+        "discord_delivery_cue_final": all(
+            post.endswith(_DISCORD_DELIVERY_CUE) for post in post_prompts
         ),
         "no_competing_framework": all("FRAMEWORK" not in prompt for prompt in prompts),
     }
@@ -142,6 +145,7 @@ def evaluate_character_contract(
             "placeholders_resolved",
             "first_message_normal_style_example",
             "discord_delivery_cue",
+            "discord_delivery_cue_final",
             "no_competing_framework",
         )
     )
@@ -157,6 +161,7 @@ def evaluate_character_contract(
             "placeholders_resolved",
             "proactive_opening_example_absent",
             "discord_delivery_cue",
+            "discord_delivery_cue_final",
             "no_competing_framework",
         )
     )

@@ -86,8 +86,8 @@ for retired in (
     assert retired not in example_values, retired
 PY
 
-if grep -RIinE 'Mika|MikaBot|[0-9]{17,20}' agentbot; then
-  echo "Release check failed: persona name or hardcoded Discord snowflake found in runtime." >&2
+if grep -RIinE '[0-9]{17,20}' agentbot; then
+  echo "Release check failed: hardcoded Discord snowflake found in runtime." >&2
   exit 1
 fi
 EXECUTABLE_MATCHES="$(

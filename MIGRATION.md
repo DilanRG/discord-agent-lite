@@ -93,4 +93,4 @@ Do not automatically import:
 - the old `interactions` rows, because channel IDs alone cannot reliably reconstruct guild/privacy scope and the rows lack disclosure provenance;
 - old logs, virtual environments, caches, or manually launched process state.
 
-Build a clean virtual environment, deploy under the dedicated systemd service account, and rotate the historical `nohup.out` log. Any future legacy-data importer should require explicit user re-consent and produce v2 provenance rather than copying rows blindly.
+Build a clean virtual environment and keep credentials, character cards, databases, and logs outside the source tree. Any future legacy-data importer should require explicit user re-consent and produce v2 provenance rather than copying rows blindly.

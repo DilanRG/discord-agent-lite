@@ -739,8 +739,8 @@ class CompactSocialMemoryTests(unittest.TestCase):
         try:
             connection.executescript(fixture.read_text(encoding="utf-8"))
             for namespace, guild_id, text, row_id, source in (
-                ("Mika", 1, "Likes concise examples", 1, "user_asserted"),
-                ("Mika", 0, "Collects miniature figures", 5, "observed"),
+                ("Example Agent", 1, "Likes concise examples", 1, "user_asserted"),
+                ("Example Agent", 0, "Collects miniature figures", 5, "observed"),
                 ("Other", 1, "Belongs to another identity", 901, "user_asserted"),
             ):
                 connection.execute(
@@ -763,9 +763,9 @@ class CompactSocialMemoryTests(unittest.TestCase):
                 ) VALUES (?, ?, 7, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    ("Mika", 1, 3, 10, "Earlier guild context.", 100, 90, 100),
-                    ("Mika", 2, 1, -10, "Latest public context.", 200, 180, 200),
-                    ("Mika", 0, 2, 0, "DM context.", 150, 140, 150),
+                    ("Example Agent", 1, 3, 10, "Earlier guild context.", 100, 90, 100),
+                    ("Example Agent", 2, 1, -10, "Latest public context.", 200, 180, 200),
+                    ("Example Agent", 0, 2, 0, "DM context.", 150, 140, 150),
                     ("Other", 1, 99, 20, "Other identity context.", 999, 999, 999),
                 ),
             )
@@ -779,7 +779,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
                 (
                     (
                         101,
-                        "Mika",
+                        "Example Agent",
                         1,
                         "g:1:c:10",
                         "I mentioned the selected event.",
@@ -807,7 +807,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
                 (
                     (
                         301,
-                        "Mika",
+                        "Example Agent",
                         1,
                         "g:1:c:10",
                         "I remember the selected guild event.",
@@ -816,7 +816,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
                     ),
                     (
                         303,
-                        "Mika",
+                        "Example Agent",
                         0,
                         "dm:7",
                         "I remember the selected DM event.",
@@ -845,11 +845,11 @@ class CompactSocialMemoryTests(unittest.TestCase):
             connection.close()
 
         with self.assertLogs("agentbot.memory", level="INFO") as migration_logs:
-            migrated = MemoryStore(path, legacy_social_namespace="Mika")
+            migrated = MemoryStore(path, legacy_social_namespace="Example Agent")
         try:
             self.assertTrue(
                 any(
-                    "Migrating v1.1 social schema using identity 'Mika'"
+                    "Migrating v1.1 social schema using identity 'Example Agent'"
                     in message
                     for message in migration_logs.output
                 ),
@@ -953,7 +953,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
             with self.assertRaises(SocialMigrationError):
                 unexpected_store = MemoryStore(
                     path,
-                    legacy_social_namespace="Mika",
+                    legacy_social_namespace="Example Agent",
                 )
         finally:
             if unexpected_store is not None:

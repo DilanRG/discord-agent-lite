@@ -7,9 +7,9 @@ from scripts.simulate_discord import _named_expectation_met, _style_expectation_
 
 class SimulateDiscordScriptTests(unittest.TestCase):
     def test_named_expectation_is_optional_and_case_insensitive(self) -> None:
-        self.assertTrue(_named_expectation_met("", "Mika"))
-        self.assertTrue(_named_expectation_met("mika", "Mika"))
-        self.assertFalse(_named_expectation_met("Rook", "Mika"))
+        self.assertTrue(_named_expectation_met("", "Example Agent"))
+        self.assertTrue(_named_expectation_met("example agent", "Example Agent"))
+        self.assertFalse(_named_expectation_met("Rook", "Example Agent"))
 
     def test_style_diagnostics_are_observations_unless_explicitly_asserted(self) -> None:
         issues = ("stage_direction",)

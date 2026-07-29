@@ -1,14 +1,62 @@
 from __future__ import annotations
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from agentbot.app import configure_logging
 from agentbot.settings import ConfigError
 from tests.support import loaded_settings
 
 
 class SettingsTests(unittest.TestCase):
+    def test_discord_library_debug_payloads_stay_disabled_at_app_debug_level(self) -> None:
+        logger_names = ("discord", "discord.gateway", "discord.http", "aiohttp.access")
+        previous_levels = {
+            name: logging.getLogger(name).level for name in logger_names
+        }
+        root_logger = logging.getLogger()
+        previous_root_level = root_logger.level
+        try:
+            root_logger.setLevel(logging.DEBUG)
+            logging.getLogger("discord.gateway").setLevel(logging.NOTSET)
+            with tempfile.TemporaryDirectory() as directory:
+                with loaded_settings(Path(directory), LOG_LEVEL="DEBUG") as settings:
+                    with (
+                        patch("agentbot.app.logging.basicConfig"),
+                        patch(
+                            "agentbot.app.logging.handlers.RotatingFileHandler",
+                            return_value=logging.NullHandler(),
+                        ),
+                    ):
+                        configure_logging(settings)
+
+            self.assertEqual(logging.getLogger("discord").level, logging.INFO)
+            self.assertFalse(logging.getLogger("discord.gateway").isEnabledFor(logging.DEBUG))
+            self.assertEqual(logging.getLogger("discord.http").level, logging.WARNING)
+            self.assertEqual(logging.getLogger("aiohttp.access").level, logging.WARNING)
+
+            with tempfile.TemporaryDirectory() as directory:
+                with loaded_settings(Path(directory), LOG_LEVEL="ERROR") as settings:
+                    with (
+                        patch("agentbot.app.logging.basicConfig"),
+                        patch(
+                            "agentbot.app.logging.handlers.RotatingFileHandler",
+                            return_value=logging.NullHandler(),
+                        ),
+                    ):
+                        configure_logging(settings)
+
+            self.assertEqual(logging.getLogger("discord").level, logging.ERROR)
+            self.assertEqual(logging.getLogger("discord.http").level, logging.ERROR)
+            self.assertEqual(logging.getLogger("aiohttp.access").level, logging.ERROR)
+        finally:
+            root_logger.setLevel(previous_root_level)
+            for name, level in previous_levels.items():
+                logging.getLogger(name).setLevel(level)
+
     def test_rejects_invalid_setting_relationships(self) -> None:
         invalid_cases = {
             "provider output exceeds context budget": {
@@ -148,6 +196,11 @@ class SettingsTests(unittest.TestCase):
                         settings.max_total_memories,
                         settings.max_memories_per_user,
                     )
+
+                with self.subTest(contract="legacy-paced proactivity"):
+                    self.assertEqual(settings.proactive_interval_seconds, 3_600)
+                    self.assertEqual(settings.proactive_min_idle_seconds, 43_200)
+                    self.assertEqual(settings.proactive_cooldown_seconds, 43_200)
 
                 with self.subTest(contract="lightweight attachments"):
                     self.assertLessEqual(settings.attachment_concurrency, 2)

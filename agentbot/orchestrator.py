@@ -22,8 +22,10 @@ logger = logging.getLogger(__name__)
 _BACKGROUND_CLOSE_GRACE_SECONDS = 2.5
 
 _DISCORD_DELIVERY_CUE = (
-    "Write only your next Discord message. "
-    "Do not add a speaker label, narration, stage directions, or dialogue for anyone else."
+    "Your next Discord message is plain message text beginning immediately. "
+    "No instruction acknowledgement, preamble, heading, divider, fabricated "
+    "server or channel event, speaker label, narration, stage directions, or "
+    "dialogue for anyone else."
 )
 _REFERENCE_CONTEXT_PREFIX = (
     "PRIVATE CONTINUITY REFERENCE\n"
@@ -159,7 +161,7 @@ class AgentCore:
 
         card_post_history = render(self.character.post_history_instructions)
         post_history = "\n\n".join(
-            item for item in (_DISCORD_DELIVERY_CUE, card_post_history) if item
+            item for item in (card_post_history, _DISCORD_DELIVERY_CUE) if item
         )
 
         def build(active: list[tuple[str, str]]) -> str:
@@ -742,7 +744,7 @@ class AgentCore:
         if reference:
             user_prompt = f"{reference}\n\n{user_prompt}"
 
-        proactive_tokens = min(160, self.settings.provider_max_tokens)
+        proactive_tokens = min(96, self.settings.provider_max_tokens)
         approximate_input_budget = max(
             3000,
             (self.settings.proactive_context_tokens - proactive_tokens) * 3,
@@ -780,7 +782,7 @@ class AgentCore:
         return sanitize_output(
             raw,
             self.character.name,
-            min(700, self.settings.max_reply_chars),
+            min(500, self.settings.max_reply_chars),
         )
 
     def cancel_relationship_reflection(self, guild_id: int, user_id: int) -> None:

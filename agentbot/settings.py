@@ -197,7 +197,7 @@ class Settings:
         if provider != "horde":
             raise ConfigError("LLM_PROVIDER must be horde")
 
-        min_idle = _env_int("PROACTIVE_MIN_IDLE_SECONDS", 21_600, 300, 2_592_000)
+        min_idle = _env_int("PROACTIVE_MIN_IDLE_SECONDS", 43_200, 300, 2_592_000)
 
         provider_max_tokens = _env_int("PROVIDER_MAX_TOKENS", 300, 32, 1200)
         provider_context_tokens = _env_int("PROVIDER_CONTEXT_TOKENS", 8192, 2048, 32768)
@@ -375,7 +375,7 @@ class Settings:
             ),
             global_concurrency=global_concurrency,
             max_pending_requests=max_pending_requests,
-            proactive_interval_seconds=_env_int("PROACTIVE_INTERVAL_SECONDS", 300, 60, 3600),
+            proactive_interval_seconds=_env_int("PROACTIVE_INTERVAL_SECONDS", 3600, 60, 3600),
             proactive_min_idle_seconds=min_idle,
             proactive_cooldown_seconds=_env_int("PROACTIVE_COOLDOWN_SECONDS", 43_200, 600, 2_592_000),
             proactive_daily_limit=_env_int("PROACTIVE_DAILY_LIMIT", 2, 0, 20),

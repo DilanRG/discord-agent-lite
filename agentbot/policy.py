@@ -89,7 +89,20 @@ _EVALUATION_META_RE = re.compile(
 )
 _RESPONSE_META_RE = re.compile(
     r"^\s*(?:here(?:['’]s|\s+is))\s+(?:my|the|a)\s+"
-    r"(?:discord[- ]style\s+)?(?:reply|response|message)\s*:",
+    r"(?:discord[- ]style\s+)?(?:reply|response|message)"
+    r"(?:\s+(?:as\s+[^:\n]{1,80}|based\s+on\s+[^:\n]{1,160}))?\s*:\s*",
+    re.IGNORECASE,
+)
+_DELIVERY_CUE_ACK_RE = re.compile(
+    r"^\s*(?:(?:alright|okay|ok)[,!.]?\s+)?i(?:['’]ll|\s+will)\s+"
+    r"(?:write|give|provide|return)\s+only\s+(?:my|the)\s+next\s+"
+    r"(?:discord\s+)?message(?:\s+as\s+[^.\n]{1,80})?[.!]?\s*",
+    re.IGNORECASE,
+)
+_FABRICATED_DISCORD_TRANSCRIPT_RE = re.compile(
+    r"\A\s*(?:[^\n]{1,120}\n+\s*)?---\s*\n+\s*"
+    r"[^\n]{1,100}\bhas\s+joined\s+the\b[^\n]{0,120}\bchannel\b[^\n]*"
+    r"\n+\s*---\s*\n+",
     re.IGNORECASE,
 )
 _CHARACTER_BREAK_RE = re.compile(
@@ -292,6 +305,9 @@ def sanitize_output(text: str, character_name: str, max_chars: int) -> str:
     text = _HIDDEN_TAG_RE.sub("", text)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     text = _ROLE_PREFIX_RE.sub("", text)
+    text = _DELIVERY_CUE_ACK_RE.sub("", text, count=1)
+    text = _RESPONSE_META_RE.sub("", text, count=1)
+    text = _FABRICATED_DISCORD_TRANSCRIPT_RE.sub("", text, count=1)
 
     escaped_name = re.escape(character_name)
     text = re.sub(rf"^\s*(?:\*\*|\*)?{escaped_name}(?:\*\*|\*)?\s*:\s*", "", text, flags=re.I)

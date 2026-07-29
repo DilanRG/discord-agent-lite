@@ -28,9 +28,9 @@ An upgraded schema-7 database may also contain model-written rolling summaries a
 
 Untrusted runtime material is serialized as JSON in the provider's user-role payload. Discord display names are not interpolated into the trusted system prompt. AI Horde role delimiters are stripped from untrusted text before trusted role framing is added.
 
-Character cards are trusted persona configuration. Each process asks the model to be that character, not a separate generic assistant pretending to play it. A fixed framework preamble and tail preserve operational boundaries, but there is deliberately no semantic content filter that softens, rejects, or retries card behavior. This permits controlled edge-case and red-team RP evaluation without confusing a wrapper's moderation behavior with the underlying model's behavior. Operators remain responsible for limiting such evaluations to the intended private guilds, channels, and participants.
+Character cards are trusted persona configuration. Each process treats its card as the model's identity rather than introducing a separate generic assistant that pretends to play it. Native prompt framing, untrusted-reference serialization, and one fixed final Discord delivery cue preserve operational boundaries, but there is deliberately no semantic content filter that softens, rejects, or retries card behavior. This permits controlled edge-case and red-team RP evaluation without confusing a wrapper's moderation behavior with the underlying model's behavior. Operators remain responsible for limiting such evaluations to the intended private guilds, channels, and participants.
 
-The card defines the character, and the framework has one fixed output contract: typed, single-speaker Discord chat without narrated gestures, stage directions, scene narration, fabricated transcript headings, timestamps, blockquotes, or additional speakers. Ordinary replies may use `first_mes` only as a labeled voice example; proactive generation excludes it explicitly. The sanitizer preserves nonempty character content after structural cleanup, and stage-direction, character-break, verbosity, and generated-transcript diagnostics never become a production delivery gate.
+The card defines the character, and the framework has one fixed output contract: typed, single-speaker Discord chat without narrated gestures, stage directions, scene narration, fabricated transcript headings, timestamps, blockquotes, or additional speakers. Ordinary replies may use `first_mes` only as a labeled voice example; proactive generation excludes it explicitly. The sanitizer preserves nonempty character content while unwrapping only tightly recognized instruction acknowledgements and fabricated heading/divider/join-event envelopes. Broader stage-direction, character-break, verbosity, and generated-transcript diagnostics never become a production rejection or retry gate.
 
 ## Social-continuity boundary
 
@@ -56,7 +56,7 @@ Automatic social reflection is intentionally narrower than ordinary conversation
 - Facts require clear first-person statements by the target user, a submitted source-event ID, and an exact first-person evidence quote found in that event.
 - Inferred impressions may describe supported recurring conversational style, social behavior, and subjective ordinary-human traits, but remain fallible and cannot become medical diagnoses or other high-stakes factual claims.
 - Every observation has a bounded topic, provenance, confidence, evidence count, status, and source context. Provider-supplied record links can mutate only active records of the same user, kind, and topic that were included in the reflection payload.
-- At most three observations are accepted from one reflection.
+- At most one observation is accepted from one reflection.
 - Direct observations confirm immediately. Inferred observations remain tentative until repeated with sufficient confidence.
 - Corrections may supersede an existing user-owned record; disputes may mark one contradicted.
 - Profile and journal text is re-sanitized after provider output.
@@ -110,13 +110,14 @@ A Sybil attack can still consume quota or fill the configured ceilings. Discord 
 - PDFs, Office documents, archives, executables, GIFs, malformed images, mismatched types, binary-looking text, and every other unsupported format fail closed.
 - Text is decoded in-process under byte and decoded-character ceilings. Image headers are inspected only for type and pixel bounds before the bytes are sent to Alchemist. There is no document parser, parser subprocess, attachment cache, chunk store, FTS index, or later attachment retrieval in the active lane.
 - One absolute deadline covers download, internal waits, UTF-8 decoding, and Alchemist across the whole admitted attachment list. Transient deadline, transport, and Alchemist failures may be attempted again only when a later admitted message supplies the attachment again.
-- Discord's typing indicator begins after channel admission and locking but before attachment work, and remains active through reply generation. Failed attachments contribute only a generic unavailable marker instructing the reply model not to guess their contents; transport details are retained in diagnostics rather than exposed in the prompt.
+- Attachment work and Horde generation intentionally emit no Discord typing indicator. Failed attachments contribute only a generic unavailable marker instructing the reply model not to guess their contents; transport details are retained in diagnostics rather than exposed in the prompt.
 - Raw downloads exist only in a private temporary directory and are removed on success, rejection, timeout, error, or cancellation.
 - Image captions are fallible current-turn context and are never represented as precise OCR. Only a turn whose final fitted context still contains a nonempty caption receives image guidance. Caption content remains in the untrusted reference JSON, and the reply prompt asks the character to hedge uncertain visual details briefly.
 - Provider connections use one small shared pool.
-- Provider requests have timeouts, a response-size ceiling, and a circuit breaker.
-- The normal chat delivery boundary strips control tags, hidden-reasoning tags, leading speaker labels, trailing forged role turns, and excess length. It deliberately preserves ordinary prose, emphasis, slang, fictional detail, character voice, and Discord mention syntax.
-- Semantic style checks are observations, not security gates. By default they do not fail even the offline simulator; a scenario must explicitly assert a diagnostic when testing the fixed Discord output shape. They never spend a second Horde generation or convert an imperfect character response into a provider outage. Typed transient failures and output that becomes empty after structural cleanup get at most one alternate-model attempt within the total chat deadline; schema-producing background tasks retain strict bounded validation because malformed JSON cannot be stored safely.
+- Provider requests have deadlines, response-size ceilings, and at most one different-model attempt after a typed transient failure.
+- The normal chat delivery boundary strips control tags, hidden-reasoning tags, leading speaker labels, trailing forged role turns, tightly recognized instruction-acknowledgement/transcript envelopes, and excess length. It deliberately preserves the usable character message, ordinary prose, emphasis, slang, fictional detail, character voice, and Discord mention syntax.
+- A proactive post is a one-shot conversation starter: newer stored participant activity is required before the same bot can start again. The default hourly sweep, 12-hour stored-activity idle threshold, 12-hour cooldown, and two-per-day ceiling remain configurable resource controls.
+- Semantic style checks are observations, not security gates. By default they do not fail even the offline simulator; a scenario must explicitly assert a diagnostic when testing the fixed Discord output shape. They never spend a second Horde generation or convert an imperfect character response into a provider outage. Typed transient failures get at most one alternate-model attempt within the total chat deadline; output that becomes empty after structural cleanup fails silently without a quality retry. Schema-producing background tasks retain strict bounded validation because malformed JSON cannot be stored safely.
 - Generated character replies and proactive messages use Discord's normal mention parsing. Administrative commands and operational notices still disable mention parsing because they are application-authored status text rather than character output.
 
 ## Remote-provider boundary
@@ -131,7 +132,7 @@ The lean runtime sends no rolling-summary, guild-continuity, or tuning-metric pr
 
 Provider credentials remain in HTTP headers and are never inserted into prompts or SQLite rows. Provider operators may apply their own logging, retention, moderation, worker-routing, and training policies. Treat a remote endpoint as a separate data processor, not as a private local component.
 
-AI Horde text requests require both trusted workers and Horde-validated inference backends by default. Adaptive routing applies the same published bridge-family gate before selecting a worker-backed model. This reduces routing mismatches; it is not a content-safety guarantee and does not change the remote-processing disclosure above.
+AI Horde text requests require trusted workers and Horde-validated inference backends in the submitted request by default. The lean router selects from live model/reference metadata without reconstructing worker backend families; AI Horde's submission gate remains authoritative. This is not a content-safety guarantee and does not change the remote-processing disclosure above.
 
 ## Privacy scopes
 
@@ -201,22 +202,11 @@ Configured blacklist entries cannot use normal agent commands or trigger ordinar
 
 ## Host hardening
 
-The supplied systemd unit:
-
-- Runs as a dedicated service account.
-- Uses a restrictive umask.
-- Grants no Linux capabilities.
-- Disables privilege escalation.
-- Protects system, home, kernel, and control-group paths.
-- Allows writes only to `data/` and `logs/`.
-- Restricts address families to Unix, IPv4, and IPv6.
-- Applies task and memory ceilings.
-
-Keep `/etc/discord-agent-lite.env` mode `0600`, restrict character-card write access, protect backups, patch the OS and Python dependencies, and do not run the service as root. Keep release directories immutable to the service user; only `/var/lib/discord-agent-lite/data` and `/var/lib/discord-agent-lite/logs` need runtime writes.
+Run the agent under a dedicated unprivileged account with a restrictive umask, no Linux capabilities, no privilege escalation, a constrained filesystem view, and explicit task and memory ceilings. Keep the environment file, character card, database, logs, and backups access-controlled and outside the source tree. Patch the OS and Python dependencies, and do not run the service as root.
 
 ## Logging
 
-Application logs contain operational events, IDs needed to diagnose Discord/provider failures, counts, and exception traces. They intentionally do not log message bodies, profile text, journal text, provider prompts, or credentials. Provider/library debug logging should remain disabled in production unless its data exposure has been reviewed.
+Application logs contain operational events, IDs needed to diagnose Discord/provider failures, counts, and exception traces. They intentionally do not log message bodies, profile text, journal text, provider prompts, or credentials. The runtime pins `discord.py` logging to `INFO` or higher even when application logging is `DEBUG`, because gateway DEBUG dispatches contain complete message payloads; Discord HTTP and aiohttp access logging remain at `WARNING` or stricter.
 
 ## Residual risks
 

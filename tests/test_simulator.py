@@ -47,7 +47,9 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
 
         memory.mark_proactive.side_effect = mark_proactive
         sent: list[tuple[int, str, dict[str, object]]] = []
-        typing_events: list[tuple[str, int]] = []
+        # Discord's authoritative creation time may differ from the scheduler's
+        # pre-generation sample; persist the former as the next no-chain marker.
+        successful_send_times = iter((now + 30, now + 1_030))
         channels: dict[int, SimpleNamespace] = {}
         for channel_id in (11, 12, 13, 14):
             channel = SimpleNamespace(
@@ -61,26 +63,13 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
 
             async def send(content: str, *, _channel=channel, **kwargs: object) -> object:
                 sent.append((_channel.id, content, dict(kwargs)))
-                return SimpleNamespace(id=60_000 + _channel.id, created_at=datetime.now(timezone.utc))
+                return SimpleNamespace(
+                    id=60_000 + _channel.id,
+                    created_at=datetime.fromtimestamp(next(successful_send_times), timezone.utc),
+                )
 
             channel.send = send
 
-            class RecordingTyping:
-                async def __aenter__(self, *, _channel_id=channel_id) -> None:
-                    typing_events.append(("enter", _channel_id))
-
-                async def __aexit__(
-                    self,
-                    exc_type: object,
-                    exc: object,
-                    traceback: object,
-                    *,
-                    _channel_id=channel_id,
-                ) -> None:
-                    del exc_type, exc, traceback
-                    typing_events.append(("exit", _channel_id))
-
-            channel.typing = RecordingTyping
             channels[channel_id] = channel
 
         generation_count = 0
@@ -122,10 +111,20 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
             with patch("agentbot.app.time.time", return_value=now + 100):
                 await AgentBot.proactive_loop.coro(bot)  # cooldown
             with patch("agentbot.app.time.time", return_value=now + 700):
-                await AgentBot.proactive_loop.coro(bot)  # intervening activity
-            with patch("agentbot.app.time.time", return_value=now + 700):
+                await AgentBot.proactive_loop.coro(bot)  # no reply since the proactive post
+            self.assertEqual(generation_count, 1)
+
+            # A participant message after the bot's proactive post makes a new
+            # turn eligible once the channel has gone idle again.
+            activity[13] = now + 650
+            channels[13].last_message_id += 1
+            with patch("agentbot.app.time.time", return_value=now + 1_000):
+                await AgentBot.proactive_loop.coro(bot)  # activity during generation
+            with patch("agentbot.app.time.time", return_value=now + 1_000):
                 await AgentBot.proactive_loop.coro(bot)  # second allowed post
-            with patch("agentbot.app.time.time", return_value=now + 1_400):
+            activity[13] = now + 1_400
+            channels[13].last_message_id += 1
+            with patch("agentbot.app.time.time", return_value=now + 1_700):
                 await AgentBot.proactive_loop.coro(bot)  # daily cap
 
         self.assertEqual([(channel_id, text) for channel_id, text, _ in sent], [
@@ -133,18 +132,8 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
             (13, "second proactive"),
         ])
         self.assertEqual(generation_count, 3)
-        self.assertEqual(
-            typing_events,
-            [
-                ("enter", 13),
-                ("exit", 13),
-                ("enter", 13),
-                ("exit", 13),
-                ("enter", 13),
-                ("exit", 13),
-            ],
-        )
         self.assertEqual(states[13][2], 2)
+        self.assertEqual(states[13][0], now + 1_030)
         self.assertNotIn(14, states)
         for _, _, send_options in sent:
             self.assertNotIn("allowed_mentions", send_options)
@@ -199,21 +188,8 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply.content, "managed role reached")
         self.assertEqual(provider.calls[0]["user_prompt"].count("<@&"), 0)
 
-    async def test_typing_covers_attachment_processing_and_generation(self) -> None:
+    async def test_attachment_processing_and_generation_do_not_emit_typing(self) -> None:
         events: list[str] = []
-
-        class RecordingTyping:
-            async def __aenter__(self) -> None:
-                events.append("typing-enter")
-
-            async def __aexit__(
-                self,
-                exc_type: object,
-                exc: object,
-                traceback: object,
-            ) -> None:
-                del exc_type, exc, traceback
-                events.append("typing-exit")
 
         class RecordingLock:
             async def acquire(self) -> None:
@@ -254,7 +230,7 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
                         patch.object(
                             simulator.channel,
                             "typing",
-                            return_value=RecordingTyping(),
+                            side_effect=AssertionError("typing indicator must stay disabled"),
                         ),
                         patch.object(
                             simulator.channel,
@@ -284,10 +260,8 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
             events,
             [
                 "lock-acquire",
-                "typing-enter",
                 "attachments",
                 "reply",
-                "typing-exit",
                 "delivery",
                 "lock-release",
             ],

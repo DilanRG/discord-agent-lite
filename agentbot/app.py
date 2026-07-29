@@ -9,6 +9,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -650,7 +651,8 @@ class AgentBot(commands.Bot):
             return
 
         try:
-            async with message.channel.typing():
+            # Generation is intentionally silent; do not emit a Discord typing indicator.
+            with nullcontext():
                 attachments = await self._process_attachments(
                     message=message,
                     scope=scope,
@@ -842,6 +844,10 @@ class AgentBot(commands.Bot):
             last_proactive, state_day, state_count = self.memory.proactive_state(
                 config.guild_id, config.channel_id
             )
+            if last_proactive and last_activity <= last_proactive:
+                # A proactive post is a one-shot conversation starter. Wait for
+                # another participant before this bot can start again.
+                continue
             if now - last_proactive < self.settings.proactive_cooldown_seconds:
                 continue
             if state_day == day_key and state_count >= self.settings.proactive_daily_limit:
@@ -854,8 +860,7 @@ class AgentBot(commands.Bot):
             last_seen_message_id = channel.last_message_id
             async with lock:
                 try:
-                    async with channel.typing():
-                        text = await self.core.proactive_message(scope)
+                    text = await self.core.proactive_message(scope)
                 except ProviderError as exc:
                     logger.info("Proactive generation skipped: %s", exc)
                     break
@@ -881,6 +886,7 @@ class AgentBot(commands.Bot):
                 except discord.HTTPException:
                     logger.warning("Could not send proactive message to channel %s", config.channel_id)
                     continue
+                sent_at = int(sent.created_at.timestamp())
                 self.memory.record_message(
                     scope=scope,
                     guild_id=config.guild_id,
@@ -890,10 +896,15 @@ class AgentBot(commands.Bot):
                     role="assistant",
                     content=text,
                     discord_message_id=sent.id,
-                    created_at=int(sent.created_at.timestamp()),
+                    created_at=sent_at,
                     is_proactive=True,
                 )
-                self.memory.mark_proactive(config.guild_id, config.channel_id, day_key, now)
+                self.memory.mark_proactive(
+                    config.guild_id,
+                    config.channel_id,
+                    day_key,
+                    sent_at,
+                )
                 posted = True
 
     @proactive_loop.before_loop
@@ -1079,13 +1090,20 @@ def configure_logging(settings: Settings) -> None:
         encoding="utf-8",
     )
     file_handler.setFormatter(formatter)
+    application_level = getattr(logging, settings.log_level, logging.INFO)
     logging.basicConfig(
-        level=getattr(logging, settings.log_level, logging.INFO),
+        level=application_level,
         handlers=[console, file_handler],
         force=True,
     )
-    logging.getLogger("discord.http").setLevel(logging.WARNING)
-    logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
+    # discord.py DEBUG gateway dispatches contain complete message payloads.
+    logging.getLogger("discord").setLevel(max(application_level, logging.INFO))
+    logging.getLogger("discord.http").setLevel(
+        max(application_level, logging.WARNING)
+    )
+    logging.getLogger("aiohttp.access").setLevel(
+        max(application_level, logging.WARNING)
+    )
 
 
 def create_memory_store(settings: Settings) -> MemoryStore:
