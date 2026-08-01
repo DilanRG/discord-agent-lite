@@ -153,6 +153,7 @@ class CommandSchemaTests(unittest.TestCase):
             "conversation memory and agent-authored profile/journal continuity are separate",
             privacy,
         )
+        self.assertIn("discord account id and available names", privacy)
         self.assertIn("profile and journal entries have no opt-out", privacy)
 
         storage = self._handler_strings("storage").casefold()
@@ -239,7 +240,7 @@ class StatusCommandTests(unittest.IsolatedAsyncioTestCase):
         bot = SimpleNamespace(
             memory=SimpleNamespace(stats=lambda: stats),
             provider=SimpleNamespace(status=lambda: provider_status),
-            character=SimpleNamespace(name="Example Agent"),
+            character=SimpleNamespace(name="Mika"),
             attachment_processor=None,
         )
 

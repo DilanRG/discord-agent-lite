@@ -16,7 +16,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from agentbot.character import Character, load_character
-from agentbot.orchestrator import AgentCore, _DISCORD_DELIVERY_CUE
+from agentbot.orchestrator import (
+    AgentCore,
+    _DISCORD_DELIVERY_CUE,
+    _DISCORD_IDENTITY_CUE,
+)
 
 
 def _prompt_core(
@@ -58,7 +62,7 @@ def evaluate_character_contract(
         normal_max_chars=normal_max_chars,
         proactive_max_chars=proactive_max_chars,
     )
-    placeholder_user = "the current user"
+    placeholder_user = "the current Discord user"
     rendered_system = character.render(character.system_prompt, placeholder_user)
     rendered_post_history = character.render(
         character.post_history_instructions,
@@ -107,6 +111,9 @@ def evaluate_character_contract(
             not rendered_post_history or rendered_post_history in post
             for post in post_prompts
         ),
+        "discord_identity_cue": all(
+            _DISCORD_IDENTITY_CUE in prompt for prompt in prompts
+        ),
         "normal_examples_full": not rendered_examples or rendered_examples in normal_prompt,
         "normal_selected_lore_full": not selected_lore or selected_lore in normal_prompt,
         "placeholders_resolved": all(
@@ -140,6 +147,7 @@ def evaluate_character_contract(
             "core_card_fields_full",
             "character_instructions_full",
             "post_history_guidance_full",
+            "discord_identity_cue",
             "normal_examples_full",
             "normal_selected_lore_full",
             "placeholders_resolved",
@@ -158,6 +166,7 @@ def evaluate_character_contract(
             "core_card_fields_full",
             "character_instructions_full",
             "post_history_guidance_full",
+            "discord_identity_cue",
             "placeholders_resolved",
             "proactive_opening_example_absent",
             "discord_delivery_cue",

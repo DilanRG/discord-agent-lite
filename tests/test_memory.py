@@ -47,6 +47,9 @@ class MemoryStoreTests(unittest.TestCase):
 
         recent = self.store.recent_messages(scope_a, 10)
         self.assertEqual([item.content for item in recent], ["My deployment uses SQLite on Fedora"])
+        self.assertTrue(self.store.has_discord_message_id(scope_a, 101))
+        self.assertFalse(self.store.has_discord_message_id(scope_a, 102))
+        self.assertFalse(self.store.has_discord_message_id(scope_a, 999))
         recall = self.store.recall_messages(
             scope=scope_a,
             user_id=7,

@@ -115,6 +115,8 @@ class _SimulatedUser:
     id: int
     display_name: str
     bot: bool
+    name: str = ""
+    global_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -368,9 +370,27 @@ class DiscordTurnSimulator:
         character = load_character(settings.character_file)
         memory = create_memory_store(settings)
         bot = _SimulationAgentBot(settings, character, memory)
-        bot_user = _SimulatedUser(bot_user_id, character.name, True)
-        human_user = _SimulatedUser(human_user_id, "simulated-user", False)
-        peer_bot_user = _SimulatedUser(bot_user_id + 1, "simulated-peer-bot", True)
+        bot_user = _SimulatedUser(
+            bot_user_id,
+            character.name,
+            True,
+            character.name,
+            character.name,
+        )
+        human_user = _SimulatedUser(
+            human_user_id,
+            "simulated-user",
+            False,
+            "simulated-user",
+            "Simulated User",
+        )
+        peer_bot_user = _SimulatedUser(
+            bot_user_id + 1,
+            "simulated-peer-bot",
+            True,
+            "simulated-peer-bot",
+            "Simulated Peer Bot",
+        )
         bot._connection.user = bot_user  # The simulator never logs in to Discord.
         channel = _SimulatedChannel(channel_id, bot_user)
         guild = _SimulatedGuild(guild_id) if guild_id else None

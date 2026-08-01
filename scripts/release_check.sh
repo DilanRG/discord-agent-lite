@@ -27,8 +27,8 @@ import ast
 root = Path.cwd()
 version_ns: dict[str, object] = {}
 exec((root / "agentbot" / "__init__.py").read_text(encoding="utf-8"), version_ns)
-assert version_ns.get("__version__") == "1.2.0", version_ns.get("__version__")
-assert version_ns.get("CLIENT_AGENT") == "discord-agent-lite:1.2.0:discord-bot"
+assert version_ns.get("__version__") == "1.2.1", version_ns.get("__version__")
+assert version_ns.get("CLIENT_AGENT") == "discord-agent-lite:1.2.1:discord-bot"
 
 for path in sorted((root / "agentbot").glob("*.py")):
     source = path.read_text(encoding="utf-8")
@@ -86,8 +86,8 @@ for retired in (
     assert retired not in example_values, retired
 PY
 
-if grep -RIinE '[0-9]{17,20}' agentbot; then
-  echo "Release check failed: hardcoded Discord snowflake found in runtime." >&2
+if grep -RIinE 'Mika|MikaBot|[0-9]{17,20}' agentbot; then
+  echo "Release check failed: persona name or hardcoded Discord snowflake found in runtime." >&2
   exit 1
 fi
 EXECUTABLE_MATCHES="$(

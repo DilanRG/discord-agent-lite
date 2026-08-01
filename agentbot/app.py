@@ -9,7 +9,6 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable
-from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -651,8 +650,7 @@ class AgentBot(commands.Bot):
             return
 
         try:
-            # Generation is intentionally silent; do not emit a Discord typing indicator.
-            with nullcontext():
+            async with message.channel.typing():
                 attachments = await self._process_attachments(
                     message=message,
                     scope=scope,
@@ -671,13 +669,27 @@ class AgentBot(commands.Bot):
                     self.settings.max_input_chars,
                 )
                 reply_context = ""
+                reply_author_id: int | None = None
+                reply_author_name = ""
+                reply_author_username = ""
+                reply_author_global_name = ""
+                reply_author_is_bot: bool | None = None
                 if reply_target is not None:
                     quoted = clean_input(reply_target.content or "", 600)
                     if not (
                         reply_target.author.id == self.user.id
                         and _is_operational_notice(quoted)
                     ):
-                        reply_context = f"{reply_target.author.display_name}: {quoted}"
+                        reply_context = quoted
+                        reply_author_id = reply_target.author.id
+                        reply_author_name = reply_target.author.display_name
+                        reply_author_username = str(
+                            getattr(reply_target.author, "name", "") or ""
+                        )
+                        reply_author_global_name = str(
+                            getattr(reply_target.author, "global_name", "") or ""
+                        )
+                        reply_author_is_bot = bool(reply_target.author.bot)
 
                 current_privacy = self.memory.privacy_state(guild_id, message.author.id)
                 persist_turn = (
@@ -712,12 +724,22 @@ class AgentBot(commands.Bot):
                     channel_id=channel_id,
                     user_id=message.author.id,
                     user_name=message.author.display_name,
+                    user_username=str(getattr(message.author, "name", "") or ""),
+                    user_global_name=str(
+                        getattr(message.author, "global_name", "") or ""
+                    ),
+                    user_is_bot=bool(message.author.bot),
                     current_message=current_input,
                     discord_message_id=message.id,
                     reply_context=reply_context,
                     reply_discord_message_id=(
                         reply_target.id if reply_target is not None else None
                     ),
+                    reply_author_id=reply_author_id,
+                    reply_author_name=reply_author_name,
+                    reply_author_username=reply_author_username,
+                    reply_author_global_name=reply_author_global_name,
+                    reply_author_is_bot=reply_author_is_bot,
                     conversation_type="dm" if message.guild is None else "guild",
                     attachments=attachments,
                 )
@@ -857,10 +879,25 @@ class AgentBot(commands.Bot):
             if lock.locked():
                 continue
             scope = MemoryStore.scope_for(config.guild_id, config.channel_id)
-            last_seen_message_id = channel.last_message_id
             async with lock:
+                current_activity, _, _ = self.memory.channel_participant_stats(
+                    config.guild_id,
+                    config.channel_id,
+                    0,
+                )
+                last_seen_message_id = channel.last_message_id
+                if (
+                    current_activity != last_activity
+                    or last_seen_message_id is None
+                    or not self.memory.has_discord_message_id(scope, last_seen_message_id)
+                ):
+                    # The process may have missed Discord traffic while offline,
+                    # or a queued turn may have changed context while this lock
+                    # was acquired. Never generate proactively from stale data.
+                    continue
                 try:
-                    text = await self.core.proactive_message(scope)
+                    async with channel.typing():
+                        text = await self.core.proactive_message(scope)
                 except ProviderError as exc:
                     logger.info("Proactive generation skipped: %s", exc)
                     break

@@ -2055,6 +2055,15 @@ class MemoryStore:
             ).fetchall()
         return [self._message_from_row(row) for row in reversed(rows)]
 
+    def has_discord_message_id(self, scope: str, discord_message_id: int) -> bool:
+        if discord_message_id <= 0:
+            return False
+        row = self._conn.execute(
+            "SELECT 1 FROM messages WHERE scope = ? AND discord_message_id = ? LIMIT 1",
+            (scope, discord_message_id),
+        ).fetchone()
+        return row is not None
+
     def recall_messages(
         self,
         *,

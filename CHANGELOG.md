@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 - 2026-08-02
+
+- Bind stored Discord continuity to immutable account IDs while retaining mutable display names as presentation-only aliases.
+- Restore Discord typing visibility for accepted turns.
+- Make proactive turns require a current, stored participant message and carry that verified turn through the final prompt, preventing stale-startup and context-free output.
+
+### Validation
+
+- Re-ran the complete public release gate after the focused identity, prompt, simulator, memory, and proactive regressions.
+- The public artifact remains code-only: no operator cards, credentials, runtime state, private evidence, or private identifiers are included.
+
 ## 1.2.0 - 2026-07-30
 
 - Publish the lean Discord-only agent: card-native single-speaker prompting, adaptive RP-first AI Horde routing, agent-owned profile/journal/relationship continuity, probabilistic ambient conversation, bounded proactivity, current-turn UTF-8/code attachments, and transient Alchemist image captions.

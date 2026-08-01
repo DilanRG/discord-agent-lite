@@ -102,7 +102,8 @@ _PRIVATE_DATA_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Persisted text is always serialized as untrusted JSON as well. Rejecting
+# Provider-produced text is validated before persistence and later rendered as
+# private agent continuity rather than as an instruction lane. Rejecting
 # durable role/instruction payloads reduces repeated prompt-poisoning pressure.
 _INSTRUCTION_RE = re.compile(
     r"(?:"

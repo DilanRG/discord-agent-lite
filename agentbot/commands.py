@@ -270,9 +270,10 @@ class AgentCommands(commands.Cog):
         embed.add_field(
             name="Text generation",
             value=(
-                "Your current message, character card, bounded recent conversation, relevant "
-                "profile/journal context, and supported current attachments are sent to an "
-                "AI Horde Scribe worker. Compact profile/journal reflections use the same service."
+                "Your Discord account ID and available names, current message, character card, "
+                "bounded recent conversation, relevant profile/journal context, and supported "
+                "current attachments are sent to an AI Horde Scribe worker. Compact "
+                "profile/journal reflections use the same service."
             ),
             inline=False,
         )
