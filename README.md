@@ -1,6 +1,12 @@
-# Discord Agent Lite 1.2
+# Discord Agent Lite 1.2.1
 
 A character-agnostic Discord chat agent designed for a small VM. Inference stays remote; local state is a bounded SQLite database. The ordinary chat path is deliberately short: retrieve bounded context, render native conversational turns, make one model request, strip protocol leakage, and send. Lightweight profiles, journals, cautious auto-replies, and gated proactivity stay outside that decision path.
+
+For the code-level reference, see [`docs/README.md`](docs/README.md). It
+expands the architecture, complete configuration surface, schema/ownership
+model, prompt/provider contract, attachment lane, test matrix, and operations
+runbook. `SECURITY.md` and `MIGRATION.md` remain the normative security and
+migration references.
 
 Character cards are deliberately excluded from this public repository. Supply your own trusted card locally; the framework contains no character-specific trigger words, canned messages, account IDs, authority levels, or operational behavior.
 
@@ -149,7 +155,7 @@ Character cards are trusted configuration and should be writable only by the ser
 
 Each process loads one card as the model's conversational identity. The prompt says to be that configured character; it does not introduce a second generic AI persona that is merely pretending to play the card. The fixed framework owns only operational boundaries such as untrusted context, secrets, nonexistent tools, source visibility, Discord delivery, and prompt structure. It does not semantically moderate or soften card content.
 
-The output contract is fixed rather than configurable: the card defines the character, and every visible or proactive reply is one typed, single-speaker Discord message without narrated gestures, stage directions, scene narration, headings, timestamps, blockquotes, or additional speakers. This is prompt guidance plus simulator diagnostics, not a regex deletion or semantic generation gate; a nonempty reply that misses the requested shape is still delivered after structural cleanup and reported for evaluation. Core card fields are kept intact in ordinary and proactive prompts. Ordinary and image-assisted chat also admit bounded example dialogue, selected lore, and `first_mes` as a labeled voice example. Proactive generation explicitly excludes that opening example, so it cannot be selected as a proactive template.
+The output contract is fixed rather than configurable: the card defines the character, and the final prompt asks for each visible or proactive reply to be one typed, single-speaker Discord message without narrated gestures, stage directions, scene narration, headings, timestamps, blockquotes, or additional speakers. This is prompt guidance plus simulator diagnostics, not a regex deletion or semantic generation gate; a nonempty reply that misses the requested shape is still delivered after structural cleanup and reported for evaluation. Core card fields are kept intact in ordinary and proactive prompts. Ordinary and image-assisted chat also admit bounded example dialogue, selected lore, and `first_mes` as a labeled voice example. Proactive generation explicitly excludes that opening example, so it cannot be selected as a proactive template.
 
 The final trusted prompt rule asks for exactly one message by the configured character. Card examples are voice evidence, not instructions to reproduce a channel transcript, headings, speaker labels, timestamps, blockquotes, or other participants. The simulator reports violations for human review without turning them into a semantic delivery filter.
 
