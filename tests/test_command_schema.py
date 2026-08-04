@@ -167,7 +167,7 @@ class CommandSchemaTests(unittest.TestCase):
             with self.subTest(handler=handler_name):
                 response = self._handler_strings(handler_name).casefold()
                 self.assertIn(
-                    "later qualifying interactions may rebuild agent continuity",
+                    "later successfully answered interactions may rebuild agent continuity",
                     response,
                 )
 

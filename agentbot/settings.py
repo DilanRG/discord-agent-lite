@@ -345,7 +345,7 @@ class Settings:
             max_total_memories=_env_int("MAX_TOTAL_MEMORIES", 5_000, 100, 100_000),
             max_model_outcomes=_env_int("MAX_MODEL_OUTCOMES", 1000, 10, 100_000),
             relationships_enabled=_env_bool("RELATIONSHIPS_ENABLED", True),
-            relationship_direct_only=_env_bool("RELATIONSHIP_DIRECT_ONLY", True),
+            relationship_direct_only=_env_bool("RELATIONSHIP_DIRECT_ONLY", False),
             relationship_reflect_every=relationship_reflect_every,
             relationship_meaningful_chars=_env_int(
                 "RELATIONSHIP_MEANINGFUL_CHARS", 220, 80, 2000

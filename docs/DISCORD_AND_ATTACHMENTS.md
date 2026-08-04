@@ -22,8 +22,8 @@ probability remains capped.
 
 Peer bots and webhook-authored messages use this same path. They may mention
 the bot directly, participate in ambient channels, enter bounded recent history,
-and become profile/reflection event authors when the normal directness rules
-allow it. There is no bot-to-bot allowlist or special bot ban. The bot's own
+and become profile/reflection event authors whenever the bot admits and
+successfully answers their turn. There is no bot-to-bot allowlist or special bot ban. The bot's own
 messages are the only categorical self-loop guard.
 
 Generated character replies and proactive posts use Discord's normal mention

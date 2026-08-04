@@ -6,6 +6,7 @@
 - Add text-bearing PDF and DOCX support through a short-lived isolated parser with strict page/archive/decompression/resource limits, cancellation-safe reaping, and one fail-closed host-wide POSIX lock.
 - Advance SQLite additively to schema 8 and retain only bounded structured attachment evidence with eligible message and relationship-event parents--never raw bytes, URLs, hashes, caches, chunks, or FTS rows.
 - Return labelled evidence with parent history and lexical recall while keeping it separate from authored Discord text. It can inform inferred social continuity, but cannot act as an instruction, establish identity/direct profile facts, or trigger explicit memory without an outer `remember this attachment` request.
+- Make every successfully answered turn eligible for relationship/profile/journal continuity by default, including admitted auto-replies; retain `RELATIONSHIP_DIRECT_ONLY=true` as the explicit restrictive override.
 - Update `/privacy`, memory controls, migration/operations guidance, simulator coverage, deterministic intake checks, and Linux-only lock/worker validation for the new lifecycle.
 
 ### Validation

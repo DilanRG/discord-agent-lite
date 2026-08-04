@@ -49,7 +49,7 @@ The normal reply prompt receives selected profile records, journal notes, and bo
 
 Automatic social reflection is intentionally narrower than ordinary conversation memory:
 
-- By default, only DMs and explicit mentions create profile/journal reflection events. A Discord reply counts as direct only when its reply `@` toggle is on; an admitted `@`-off reply is ambient.
+- By default, every turn the bot successfully answers creates a profile/journal reflection event for that author, including admitted auto-replies. Operators can set `RELATIONSHIP_DIRECT_ONLY=true` to restrict events to DMs, explicit mentions, and replies whose Discord `@` toggle is on.
 - An event is recorded only after a response was successfully sent.
 - The event contains the target user's own base message and the bot's response.
 - Quoted reply context, usernames, and passive third-party chatter are excluded. Ready attachment evidence may be included as a separately labelled fallible field for relationship deltas, journal notes, or inferred impressions. It can never support a direct fact/evidence quote, issue an instruction, or establish identity. Any admitted author, including a peer bot or webhook, otherwise follows the same explicit-memory and profile/journal-reflection rules.
@@ -128,7 +128,7 @@ Normal replies send the current message and bounded relevant context to the conf
 
 When Alchemist is enabled, supported images on admitted responses are base64-encoded and sent to the configured AI Horde `/interrogate/async` endpoint. Captioning always runs; optional interrogation tags are off by default. Community Scribe and Alchemist worker operators may receive submitted data and may have their own logging or retention practices. `/privacy` discloses this boundary in Discord.
 
-Profile/journal reflection sends completed direct user/assistant pairs plus bounded ready attachment evidence by default. The provider does not receive raw attachments or quoted reply context through that path. Its system contract permits evidence only for relationship deltas, journal notes, and inferred impressions; direct facts still require an exact first-person quote from outer authored `target_user_said`.
+Profile/journal reflection sends completed successfully answered user/assistant pairs plus bounded ready attachment evidence by default. The provider does not receive raw attachments or quoted reply context through that path. Its system contract permits evidence only for relationship deltas, journal notes, and inferred impressions; direct facts still require an exact first-person quote from outer authored `target_user_said`.
 
 The lean runtime sends no rolling-summary, guild-continuity, or tuning-metric provider job. Related schema rows and parsers exist only for migration, rollback, and deletion compatibility.
 
@@ -171,10 +171,10 @@ Dormant compatibility state:
 `/memory storage enabled:false`:
 
 - Prevents future conversation-message, conversation attachment-evidence, and explicit-memory updates for that user in the current guild/DM.
-- Can still process a supported new attachment on a directly requested reply; eligible relationship-event evidence remains in the separate social lane, while the active path still never writes an attachment cache/chunk/FTS row.
+- Can still process a supported new attachment on an admitted turn the bot answers; eligible relationship-event evidence remains in the separate social lane, while the active path still never writes an attachment cache/chunk/FTS row.
 - Does not delete existing conversation memory.
 - Does not disable, delete, or suppress the separate agent-authored profile, journal, relationship event, or reflection state.
-- Does not prevent transient provider processing when the user directly requests a reply.
+- Does not prevent transient provider processing when the bot admits and answers the turn.
 
 `/profile delete`:
 
@@ -187,7 +187,7 @@ Dormant compatibility state:
 - Deletes the user's global profile records, relationship row, journal rows, pending events and their attachment evidence, and reflection-scheduling state.
 - Increments one global profile revision without changing any conversation-memory preference or revision.
 - Does not delete explicit memories or messages.
-- Does not create an opt-out. Later qualifying interactions can rebuild profile and journal continuity.
+- Does not create an opt-out. Later successfully answered interactions can rebuild profile and journal continuity.
 
 `/memory forget confirm:true`:
 
@@ -197,7 +197,7 @@ Dormant compatibility state:
 - Does not change the future conversation-memory storage preference.
 - Does not delete or suppress global profile, journal, pending-reflection, relationship, or guild-continuity state.
 
-Profile, journal, and relationship continuity is agent-authored internal state, not user-authored memory. It has private view, typed-delete, and reset controls, but no opt-out or suppression list. Continued qualifying interaction can create new observations after deletion/reset; simply not interacting with the agent prevents new direct-only events. Reflection batches capture the global profile revision before provider work, and transactional saves fail after a delete/reset so stale work cannot resurrect deleted state. Conversation-memory writes use a separate current-scope revision. Community Scribe processing of bounded social context remains disclosed above.
+Profile, journal, and relationship continuity is agent-authored internal state, not user-authored memory. It has private view, typed-delete, and reset controls, but no opt-out or suppression list. Continued answered interaction can create new observations after deletion/reset; simply not interacting with the agent prevents new events. Reflection batches capture the global profile revision before provider work, and transactional saves fail after a delete/reset so stale work cannot resurrect deleted state. Conversation-memory writes use a separate current-scope revision. Community Scribe processing of bounded social context remains disclosed above.
 
 ## Blacklist and deletion access
 

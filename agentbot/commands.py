@@ -310,8 +310,8 @@ class AgentCommands(commands.Cog):
                 "authenticate anyone, establish direct profile facts, or request memory; only "
                 "your outer Discord message can do that. Profile and journal entries have no opt-out; "
                 "use private `/profile view`, `/profile facts`, `/profile journal`, "
-                "`/profile delete`, or `/profile reset` controls. Continued qualifying "
-                "interactions can create new observations after deletion or reset."
+                "`/profile delete`, or `/profile reset` controls. Continued successfully "
+                "answered interactions can create new observations after deletion or reset."
             ),
             inline=False,
         )
@@ -637,7 +637,7 @@ class AgentCommands(commands.Cog):
         )
         await interaction.response.send_message(
             (
-                "Deleted that social record. Later qualifying interactions may rebuild "
+                "Deleted that social record. Later successfully answered interactions may rebuild "
                 "agent continuity."
                 if deleted
                 else "No matching social record owned by you."
@@ -686,8 +686,8 @@ class AgentCommands(commands.Cog):
             "Reset your agent profile, relationship state, and character journal. "
             f"Removed {removed['profile_facts']} profile records, {removed['relationships']} "
             f"relationship state, {removed['journal_entries']} journal entries, and "
-            f"{removed['pending_interactions']} pending reflections. Later qualifying "
-            "interactions may rebuild agent continuity.",
+            f"{removed['pending_interactions']} pending reflections. Later successfully "
+            "answered interactions may rebuild agent continuity.",
             ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )

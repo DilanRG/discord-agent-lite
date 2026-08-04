@@ -380,10 +380,34 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply.content, "peer bot acknowledged")
             self.assertEqual(len(provider.calls), 1)
             self.assertEqual(stats["messages"], 2)
-            self.assertEqual(stats["pending_interactions"], 0)
+            self.assertEqual(stats["relationships"], 1)
+            self.assertEqual(stats["pending_interactions"], 1)
             self.assertEqual(stats["group_events"], 0)
             self.assertEqual(stats["interaction_metrics"], 0)
             self.assertEqual(activity[1:], (1, 1))
+
+    async def test_direct_only_override_excludes_ambient_auto_reply_social_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with loaded_settings(
+                root,
+                AUTO_REPLY_CHANNELS="10",
+                AUTO_REPLY_PROBABILITY="1",
+                RELATIONSHIP_DIRECT_ONLY="true",
+            ) as settings:
+                provider = ScriptedProvider(["ambient reply without social event"])
+                simulator = await DiscordTurnSimulator.create(settings, provider=provider)
+                try:
+                    with patch("agentbot.app.random.random", return_value=0.0):
+                        reply = await simulator.send("ambient", mention_bot=False)
+                    stats = simulator.bot.memory.stats()
+                finally:
+                    await simulator.close()
+            self.assertTrue(reply.generated)
+            self.assertEqual(reply.content, "ambient reply without social event")
+            self.assertEqual(stats["messages"], 2)
+            self.assertEqual(stats["relationships"], 0)
+            self.assertEqual(stats["pending_interactions"], 0)
 
     async def test_peer_bot_direct_mention_needs_no_channel_flags(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -462,7 +486,6 @@ class DiscordTurnSimulatorTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "AUTO_REPLY_CHANNELS": "10",
                     "AUTO_REPLY_PROBABILITY": "1",
-                    "RELATIONSHIP_DIRECT_ONLY": "false",
                 },
                 {
                     "author_is_bot": True,

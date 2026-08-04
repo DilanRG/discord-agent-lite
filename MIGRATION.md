@@ -51,9 +51,11 @@ Startup logs the selected legacy identity before migration. Only that identity i
 
 ### Recommended Phase 1 settings
 
+Version 1.3 makes every successfully answered turn eligible for social continuity by default. Existing deployments that explicitly set `RELATIONSHIP_DIRECT_ONLY=true` keep the older restrictive behavior; change that value to `false` if admitted auto-replies should also become relationship/profile/journal events.
+
 ```dotenv
 RELATIONSHIPS_ENABLED=true
-RELATIONSHIP_DIRECT_ONLY=true
+RELATIONSHIP_DIRECT_ONLY=false
 RELATIONSHIP_REFLECT_EVERY=6
 RELATIONSHIP_MEANINGFUL_CHARS=220
 RELATIONSHIP_MEANINGFUL_EVENT_THRESHOLD=1

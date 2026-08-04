@@ -69,11 +69,10 @@ The gate:
 7. Measures constructed-process RSS and enforces the configured ceiling.
 8. Checks the version/client-agent string and character-contract invariants.
 
-The current private release gate recorded 156 tests, 400 boundary cases, 16
-attachment cases, static/dependency checks, and a sub-100 MiB offline RSS
-sample. The sanitized public mirror intentionally has a smaller test set
-because private card-path overrides are removed; it still runs its own release
-gate.
+The current public release candidate records 172 tests, 400 boundary cases,
+16 attachment cases, static/dependency checks, and a sub-100 MiB offline RSS
+sample. Linux exercises the real host-wide document lock path; other platforms
+retain one expected POSIX-only skip.
 
 The release gate is not live acceptance. A live request is required to verify
 Discord permissions, real typing, Horde worker routing, card fidelity,

@@ -249,9 +249,9 @@ The journal stores short, first-person subjective continuity notes for one Disco
 
 ### Reflection lifecycle
 
-With defaults, a successful direct conversation adds one bounded user/assistant event pair. Reflection becomes due after six pending pairs or one meaningful event, subject to the 30-minute minimum interval. A long exchange or correction/conflict cue can mark an event meaningful. The background task sends up to ten numbered pairs to the provider and may add three grounded facts/impressions, one bounded relationship update, and one journal note. Direct facts require an exact first-person evidence quote from their named source event. Process restart does not lose pending pairs; startup and maintenance sweeps schedule due reflections.
+With defaults, every turn the bot successfully answers adds one bounded user/assistant event pair for that author, including an admitted auto-reply. Reflection becomes due after six pending pairs or one meaningful event, subject to the 30-minute minimum interval. A long exchange or correction/conflict cue can mark an event meaningful. The background task sends up to ten numbered pairs to the provider and may add three grounded facts/impressions, one bounded relationship update, and one journal note. Direct facts require an exact first-person evidence quote from their named source event. Process restart does not lose pending pairs; startup and maintenance sweeps schedule due reflections.
 
-Attachments, quoted reply context, usernames, and passive third-party messages are excluded from automatic social reflection. The author of an admitted turn—including a peer bot or webhook—can build continuity under the same rules. Set `RELATIONSHIP_DIRECT_ONLY=false` only when you intentionally want successful passive auto-replies to count as profile/journal reflection events.
+Quoted reply context, usernames, and passive third-party messages remain excluded from automatic social reflection. The admitted author's own message and the bot's successful response form the event; bounded attachment evidence may accompany that authored message as a separately labelled fallible field. The author—including a peer bot or webhook—builds continuity under the same rules. Set `RELATIONSHIP_DIRECT_ONLY=true` only when you intentionally want to restrict events to DMs, explicit mentions, and replies whose Discord `@` toggle is on.
 
 ### Prompt use
 
@@ -279,9 +279,9 @@ This is global continuity for one bot, not a global cross-user dossier. Records 
 
 `/privacy` privately explains which bounded context goes to community AI Horde Scribe workers, when images go to Alchemist workers, what is stored locally, and which controls are available.
 
-`/memory storage enabled:false` prevents future conversation-message, conversation attachment-evidence, and explicit-memory persistence for that user in the current guild/DM. It does not disable or delete the agent's separate inferred profile, journal, relationship events/evidence, or reflection scheduling. A directly requested reply still sends the current message and supported new attachment data to the relevant remote worker. The lean lane never caches or indexes uploaded bytes. Databases upgraded from an older release may retain inert legacy attachment rows until a forget or maintenance operation removes them.
+`/memory storage enabled:false` prevents future conversation-message, conversation attachment-evidence, and explicit-memory persistence for that user in the current guild/DM. It does not disable or delete the agent's separate inferred profile, journal, relationship events/evidence, or reflection scheduling. An admitted turn the bot answers still sends the current message and supported new attachment data to the relevant remote worker. The lean lane never caches or indexes uploaded bytes. Databases upgraded from an older release may retain inert legacy attachment rows until a forget or maintenance operation removes them.
 
-`/profile reset` deletes the invoking user's global profile records, relationship state, journal, and pending reflection events. It cancels an in-flight social reflection, but does not delete explicit memories or conversation messages. Agent-owned social continuity has no opt-out: later qualifying interactions can build new observations after a delete or reset. Without a successfully delivered qualifying interaction, the agent creates no new social event.
+`/profile reset` deletes the invoking user's global profile records, relationship state, journal, and pending reflection events. It cancels an in-flight social reflection, but does not delete explicit memories or conversation messages. Agent-owned social continuity has no opt-out: later successfully answered interactions can build new observations after a delete or reset. Without a successfully delivered answer, the agent creates no new social event.
 
 `/memory forget confirm:true` deletes conversation rows, their structured attachment evidence, and explicit memories in the current guild/DM plus associated legacy summary and attachment-source links. It does not change the future conversation-memory storage setting and does not delete or disable profile/journal continuity. `/profile reset` independently removes relationship-event evidence with the social parent rows.
 
@@ -329,7 +329,7 @@ Important `.env` controls:
 
 ```dotenv
 RELATIONSHIPS_ENABLED=true
-RELATIONSHIP_DIRECT_ONLY=true
+RELATIONSHIP_DIRECT_ONLY=false
 RELATIONSHIP_REFLECT_EVERY=6
 RELATIONSHIP_MEANINGFUL_CHARS=220
 RELATIONSHIP_MEANINGFUL_EVENT_THRESHOLD=1

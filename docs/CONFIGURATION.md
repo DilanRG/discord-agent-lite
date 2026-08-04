@@ -115,7 +115,7 @@ URLs fail closed.
 | Variable | Default | Range / behavior |
 | --- | ---: | --- |
 | `RELATIONSHIPS_ENABLED` | `true` | Boolean; enables agent-authored social continuity. |
-| `RELATIONSHIP_DIRECT_ONLY` | `true` | Boolean; only DMs/explicit direct events become social events by default. |
+| `RELATIONSHIP_DIRECT_ONLY` | `false` | Boolean; every successfully answered turn becomes a social event by default. Set `true` to restrict events to DMs, explicit mentions, and replies whose Discord `@` toggle is on. |
 | `RELATIONSHIP_REFLECT_EVERY` | `6` | Integer `2..50` completed pairs. |
 | `RELATIONSHIP_MEANINGFUL_CHARS` | `220` | Integer `80..2000` event significance threshold. |
 | `RELATIONSHIP_MEANINGFUL_EVENT_THRESHOLD` | `1` | Integer `1..10` meaningful-event fallback. |
