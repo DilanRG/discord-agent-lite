@@ -240,7 +240,7 @@ class StatusCommandTests(unittest.IsolatedAsyncioTestCase):
         bot = SimpleNamespace(
             memory=SimpleNamespace(stats=lambda: stats),
             provider=SimpleNamespace(status=lambda: provider_status),
-            character=SimpleNamespace(name="Mika"),
+            character=SimpleNamespace(name="Test Character"),
             attachment_processor=None,
         )
 

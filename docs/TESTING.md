@@ -3,7 +3,8 @@
 ## Local prerequisites
 
 The runtime requires Python 3.10+ and the three packages in
-`requirements.txt`: `discord.py`, `aiohttp`, and `python-dotenv`. The test
+`requirements.txt`: `discord.py`, `aiohttp`, `python-dotenv`, and pinned
+`pypdf==6.14.2`. The test
 suite uses the standard library `unittest`; pytest is not required.
 
 ```bash
@@ -46,7 +47,7 @@ Important simulator regressions include:
 Orchestrator and social-memory tests cover card/native prompt order, opening
 example gating, profile/journal visibility, relationship tone, attachment and
 reply deduplication, reflection provenance, bounded records, atomic saves,
-deletion races, v1.1-to-schema-7 migration, and future-schema rejection.
+deletion races, v1.1-to-schema-8 migration, and future-schema rejection.
 
 ## Reproducible release gate
 
@@ -76,7 +77,8 @@ gate.
 
 The release gate is not live acceptance. A live request is required to verify
 Discord permissions, real typing, Horde worker routing, card fidelity,
-profile/journal reflection, current-turn image/text handling, proactive
+profile/journal reflection, byte-authoritative image plus text/PDF/DOCX handling,
+parent-linked evidence recall and authority boundaries, proactive
 eligibility, and intended peer-bot behavior.
 
 ## Scenario runner

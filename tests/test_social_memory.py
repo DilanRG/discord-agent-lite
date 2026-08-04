@@ -74,7 +74,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         )
 
     def test_compact_reflection_persistence_is_atomic_and_preserves_legacy_state(self) -> None:
-        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 7)
+        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 8)
         self._record(1, meaningful=True)
         self.store._conn.execute(
             "UPDATE relationships SET affection = 4, trust = -2, summary = ? "
@@ -732,7 +732,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         self.assertEqual(self.store.social_profile_counts(user_id=7), social_before)
         self.assertEqual(self.store.relationship_state(user_id=7), relationship_before)
 
-    def test_v1_1_fixture_migrates_only_the_selected_identity_to_schema_7(self) -> None:
+    def test_v1_1_fixture_migrates_only_the_selected_identity_to_schema_8(self) -> None:
         path = Path(self.directory.name) / "legacy.db"
         fixture = Path(__file__).parent / "fixtures" / "v1_1_social_schema.sql"
         connection = sqlite3.connect(path)
@@ -855,7 +855,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
                 ),
                 migration_logs.output,
             )
-            self.assertEqual(migrated._conn.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(migrated._conn.execute("PRAGMA user_version").fetchone()[0], 8)
             records = migrated.list_profile_records(user_id=7, limit=10)
             self.assertEqual(
                 {item.text for item in records},
@@ -976,7 +976,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_schema_v4_upgrades_additively_to_v7(self) -> None:
+    def test_schema_v4_upgrades_additively_to_v8(self) -> None:
         self.store.record_message(
             scope="g:1:c:10",
             guild_id=1,
@@ -1005,10 +1005,10 @@ class CompactSocialMemoryTests(unittest.TestCase):
             connection.close()
 
         self.store = MemoryStore(path)
-        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 7)
+        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 8)
         self.assertEqual(self.store.stats()["messages"], 1)
 
-    def test_schema_v5_quarantines_unsafe_profile_data_while_advancing_to_v7(self) -> None:
+    def test_schema_v5_quarantines_unsafe_profile_data_while_advancing_to_v8(self) -> None:
         safe_id = self.store.add_profile_record(
             user_id=7,
             kind="fact",
@@ -1040,7 +1040,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         self.store.close()
 
         self.store = MemoryStore(path)
-        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 7)
+        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 8)
         records = self.store.list_profile_records(
             user_id=7,
             limit=10,
@@ -1048,7 +1048,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         )
         self.assertEqual([item.id for item in records], [safe_id])
 
-    def test_schema_v6_revalidates_subjective_journals_when_advancing_to_v7(self) -> None:
+    def test_schema_v6_revalidates_subjective_journals_when_advancing_to_v8(self) -> None:
         path = self.store.path
         self.store._conn.executemany(
             """
@@ -1068,7 +1068,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         self.store.close()
 
         self.store = MemoryStore(path)
-        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 7)
+        self.assertEqual(self.store._conn.execute("PRAGMA user_version").fetchone()[0], 8)
         entries = self.store.recent_journal_entries(user_id=7, limit=10)
         self.assertEqual(
             [(item.text, item.source_message_id) for item in entries],
@@ -1080,7 +1080,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
         self.store.close()
         connection = sqlite3.connect(path)
         try:
-            connection.execute("PRAGMA user_version = 8")
+            connection.execute("PRAGMA user_version = 9")
             connection.commit()
         finally:
             connection.close()
@@ -1089,7 +1089,7 @@ class CompactSocialMemoryTests(unittest.TestCase):
             MemoryStore(path)
         connection = sqlite3.connect(path)
         try:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 9)
         finally:
             connection.close()
 

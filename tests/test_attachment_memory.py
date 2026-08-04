@@ -8,13 +8,13 @@ from agentbot.memory import MemoryStore
 
 
 class DormantAttachmentSchemaTests(unittest.TestCase):
-    def test_schema_v7_attachment_tables_remain_available_but_empty(self) -> None:
+    def test_schema_v8_attachment_tables_remain_available_but_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = MemoryStore(Path(directory) / "memory.db")
             try:
                 self.assertEqual(
                     int(store._conn.execute("PRAGMA user_version").fetchone()[0]),
-                7,
+                8,
                 )
                 tables = {
                     str(row[0])

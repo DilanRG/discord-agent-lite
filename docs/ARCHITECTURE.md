@@ -27,8 +27,11 @@ flowchart TD
     P -->|yes| L
     L --> K[per-channel lock]
     K --> Y[typing context]
-    Y --> F[bounded attachments]
-    F --> O[AgentCore prompt assembly]
+    Y --> F[byte-led bounded attachments]
+    F --> X{PDF or DOCX?}
+    X -->|yes| V[host lock + disposable worker]
+    X -->|no| O[AgentCore prompt assembly]
+    V --> O
     O --> H[Horde router/client]
     H --> Q[structural output cleanup]
     Q --> W[Discord reply or channel fallback]
@@ -109,14 +112,16 @@ pending post. A sweep posts at most once.
 | `commands.py` | `/agent`, `/memory`, `/profile`, and `/privacy` commands | Yes |
 | `character.py` | Plain and `chara_card_v2` loading, bounded fields, lore matching | Yes |
 | `orchestrator.py` | Prompt assembly, context fitting, replies, proactivity, reflection scheduling | Yes |
-| `memory.py` | Schema-7 SQLite, scopes, CRUD, revisions, pruning, migration | Yes |
+| `memory.py` | Schema-8 SQLite, scopes, CRUD, revisions, pruning, migration | Yes |
 | `social.py` | Reflection parsing, provenance, secret/instruction-shaped text checks, relationship math | Yes |
 | `policy.py` | Input cleanup, explicit-memory extraction, output structural cleanup, diagnostics, limiters | Yes |
 | `prompt_formats.py` | ChatML, Llama 3, Mistral/Tekken, Gemma, and Alpaca rendering | Yes |
 | `horde_client.py` | Async Horde text/Alchemist submit, poll, cancel, and typed failures | Yes |
 | `horde_router.py` | Live/reference metadata parsing, eligibility, ranking, sticky selections | Yes |
 | `llm.py` | Provider deadline, prompt formatting, alternate-model retry, outcomes | Yes |
-| `attachments.py` | Current-turn CDN, UTF-8, PNG/JPEG/WebP, and Alchemist lane | Yes |
+| `attachment_evidence.py` | Bounded parent-linked evidence codec and prompt shape | Yes |
+| `attachment_worker.py` | Disposable resource-bounded PDF/DOCX text parser | Worker only |
+| `attachments.py` | Byte-led CDN intake, UTF-8/images, host worker gate, and Alchemist | Yes |
 | `simulator.py` | Offline Discord-like harness that exercises the real handler path | Test support |
 | `settings.py` | Environment parsing and cross-setting validation | Yes |
 | `group.py` | Historical guild/group reflection parser | Compatibility only |

@@ -418,11 +418,13 @@ class DiscordTurnSimulator:
             memory=memory,
             limits=AttachmentLimits(
                 max_bytes=settings.max_attachment_bytes,
-                max_extracted_chars=settings.attachment_max_extracted_chars,
-                # Compatibility-only document parser fields.
-                max_pages=1,
-                max_archive_entries=1,
-                max_archive_uncompressed_bytes=1,
+                max_extracted_chars=min(
+                    settings.attachment_max_extracted_chars,
+                    settings.max_attachment_chars,
+                ),
+                max_pages=32,
+                max_archive_entries=128,
+                max_archive_uncompressed_bytes=16_777_216,
                 max_pixels=settings.attachment_max_pixels,
                 timeout_seconds=settings.attachment_timeout_seconds,
             ),
@@ -433,6 +435,8 @@ class DiscordTurnSimulator:
             chunk_overlap=0,
             prompt_chars=settings.max_attachment_chars,
             concurrency=settings.attachment_concurrency,
+            # The simulator deliberately does not depend on the host POSIX gate.
+            document_lock_path=None,
             image_analyzer=bot._analyze_image if bot.alchemist_client is not None else None,
         )
         core = _RecordingAgentCore(

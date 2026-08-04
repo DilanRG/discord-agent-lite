@@ -122,6 +122,7 @@ class Settings:
     attachment_max_pixels: int
     attachment_timeout_seconds: float
     attachment_concurrency: int
+    attachment_document_lock_path: str
     alchemist_api_key: str
     alchemist_enabled: bool
     max_reply_chars: int
@@ -318,9 +319,9 @@ class Settings:
                 "MAX_ATTACHMENT_BYTES", 5_242_880, 1024, 20_000_000
             ),
             max_attachment_chars=_env_int("MAX_ATTACHMENT_CHARS", 6000, 256, 16000),
-            attachment_max_count=_env_int("ATTACHMENT_MAX_COUNT", 2, 1, 3),
+            attachment_max_count=_env_int("ATTACHMENT_MAX_COUNT", 2, 1, 2),
             attachment_max_extracted_chars=_env_int(
-                "ATTACHMENT_MAX_EXTRACTED_CHARS", 100_000, 1000, 1_000_000
+                "ATTACHMENT_MAX_EXTRACTED_CHARS", 6_000, 1000, 1_000_000
             ),
             attachment_max_pixels=_env_int(
                 "ATTACHMENT_MAX_PIXELS", 16_777_216, 1024, 100_000_000
@@ -329,6 +330,9 @@ class Settings:
                 "ATTACHMENT_TIMEOUT_SECONDS", 60.0, 1.0, 60.0
             ),
             attachment_concurrency=_env_int("ATTACHMENT_CONCURRENCY", 1, 1, 2),
+            attachment_document_lock_path=os.getenv(
+                "ATTACHMENT_DOCUMENT_LOCK_PATH", "/run/lock/agent-lite-attachments.lock"
+            ).strip(),
             alchemist_api_key=alchemist_api_key,
             alchemist_enabled=_env_bool("ALCHEMIST_ENABLED", True),
             max_reply_chars=_env_int("MAX_REPLY_CHARS", 1800, 128, 1950),

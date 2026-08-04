@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from .attachment_evidence import AttachmentEvidence, decode_attachment_parts, encode_attachment_parts
 from .policy import tokenize
 from .social import (
     RELATIONSHIP_DIMENSIONS,
@@ -92,7 +93,8 @@ CREATE TABLE IF NOT EXISTS relationship_events (
     assistant_text TEXT NOT NULL,
     source_message_id INTEGER,
     meaningful INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    attachment_parts_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_relationship_events_user
     ON relationship_events(guild_id, user_id, id ASC);
@@ -199,6 +201,7 @@ class MessageRecord:
     created_at: int
     discord_message_id: int | None
     is_proactive: bool
+    attachment_parts: tuple[AttachmentEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,6 +315,7 @@ class InteractionEvent:
     source_message_id: int | None
     meaningful: bool
     created_at: int
+    attachment_parts: tuple[AttachmentEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -519,9 +523,9 @@ class MemoryStore:
 
     def _schema_preflight(self) -> tuple[int, bool, str]:
         schema_version = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
-        if schema_version > 7:
+        if schema_version > 8:
             raise SocialMigrationError(
-                f"Database schema version {schema_version} is newer than supported version 7"
+                f"Database schema version {schema_version} is newer than supported version 8"
             )
         legacy_social_schema = self._table_has_column("profile_facts", "agent_namespace")
         legacy_social_identity = (
@@ -550,7 +554,8 @@ class MemoryStore:
                 content TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 discord_message_id INTEGER UNIQUE,
-                is_proactive INTEGER NOT NULL DEFAULT 0
+                is_proactive INTEGER NOT NULL DEFAULT 0,
+                attachment_parts_json TEXT NOT NULL DEFAULT '[]'
             );
             CREATE INDEX IF NOT EXISTS idx_messages_scope_time
                 ON messages(scope, id DESC);
@@ -733,9 +738,17 @@ class MemoryStore:
             self._migrate_v1_social_schema(legacy_social_identity)
         else:
             self._create_social_schema()
+        if not self._table_has_column("messages", "attachment_parts_json"):
+            self._conn.execute(
+                "ALTER TABLE messages ADD COLUMN attachment_parts_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        if not self._table_has_column("relationship_events", "attachment_parts_json"):
+            self._conn.execute(
+                "ALTER TABLE relationship_events ADD COLUMN attachment_parts_json TEXT NOT NULL DEFAULT '[]'"
+            )
         if schema_version < 7 or legacy_social_schema:
             self._quarantine_unsafe_social_rows()
-        self._conn.execute("PRAGMA user_version = 7")
+        self._conn.execute("PRAGMA user_version = 8")
         self._conn.commit()
 
     def _table_has_column(self, table: str, column: str) -> bool:
@@ -1727,6 +1740,7 @@ class MemoryStore:
                 int(row["discord_message_id"]) if row["discord_message_id"] is not None else None
             ),
             is_proactive=bool(row["is_proactive"]),
+            attachment_parts=decode_attachment_parts(row["attachment_parts_json"]),
         )
 
     @staticmethod
@@ -1808,17 +1822,19 @@ class MemoryStore:
         discord_message_id: int | None = None,
         created_at: int | None = None,
         is_proactive: bool = False,
+        attachment_parts: Iterable[AttachmentEvidence] = (),
     ) -> int | None:
         clean_content = (content or "").replace("\x00", "").strip()[:16_000]
         if not clean_content or role not in {"user", "assistant"}:
             return None
         now = int(created_at or time.time())
+        parts_json = encode_attachment_parts(attachment_parts)
         cursor = self._conn.execute(
             """
             INSERT OR IGNORE INTO messages(
                 scope, guild_id, channel_id, user_id, author_name, role,
-                content, created_at, discord_message_id, is_proactive
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                content, created_at, discord_message_id, is_proactive, attachment_parts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 scope,
@@ -1831,6 +1847,7 @@ class MemoryStore:
                 now,
                 discord_message_id,
                 int(is_proactive),
+                parts_json,
             ),
         )
         if cursor.rowcount and self.max_messages_per_scope:
@@ -2097,7 +2114,10 @@ class MemoryStore:
         scored: list[tuple[MessageRecord, float]] = []
         for row in rows:
             message = self._message_from_row(row)
-            message_tokens = set(tokenize(message.content, limit=40))
+            evidence_text = " ".join(
+                part.text for part in message.attachment_parts if part.status == "ready"
+            )
+            message_tokens = set(tokenize(f"{message.content} {evidence_text}", limit=80))
             overlap = len(query_tokens & message_tokens)
             if overlap == 0:
                 continue
@@ -2660,6 +2680,7 @@ class MemoryStore:
         source_message_id: int | None = None,
         meaningful: bool = False,
         created_at: int | None = None,
+        attachment_parts: Iterable[AttachmentEvidence] = (),
     ) -> RelationshipState:
         existing = self._conn.execute(
             "SELECT 1 FROM relationships WHERE user_id = ?",
@@ -2672,6 +2693,7 @@ class MemoryStore:
             if relationship_count >= self.max_total_relationships:
                 return self.relationship_state(user_id=user_id)
         now = int(created_at or time.time())
+        parts_json = encode_attachment_parts(attachment_parts)
         clean_user = sanitize_social_text(user_text, 650)
         clean_assistant = sanitize_social_text(assistant_text, 650)
         if not social_text_allowed(clean_user):
@@ -2697,8 +2719,8 @@ class MemoryStore:
             """
             INSERT INTO relationship_events(
                 guild_id, channel_id, user_id, scope, user_text, assistant_text,
-                source_message_id, meaningful, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_message_id, meaningful, created_at, attachment_parts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 guild_id,
@@ -2710,6 +2732,7 @@ class MemoryStore:
                 source_message_id,
                 int(bool(meaningful)),
                 now,
+                parts_json,
             ),
         )
         if self.max_pending_interactions_per_user:
@@ -2836,6 +2859,7 @@ class MemoryStore:
                 ),
                 meaningful=bool(row["meaningful"]),
                 created_at=int(row["created_at"]),
+                attachment_parts=decode_attachment_parts(row["attachment_parts_json"]),
             )
             for row in rows
         )

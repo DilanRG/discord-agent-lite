@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import math
+import os
+import stat
 import struct
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -67,6 +72,8 @@ _IMAGE_MIMES = {
     "jpeg": "image/jpeg",
     "webp": "image/webp",
 }
+_PDF_MAGIC = b"%PDF-"
+_DOCX_MAGIC = b"PK\x03\x04"
 
 
 class AttachmentError(RuntimeError):
@@ -131,6 +138,7 @@ class ProcessedAttachment:
     width: int = 0
     height: int = 0
     truncated: bool = False
+    confidence: float | None = None
 
 
 def attachment_processing_admitted(will_respond: bool, attachment_count: int) -> bool:
@@ -173,7 +181,7 @@ def _looks_binary_or_document(data: bytes) -> bool:
             b"\xfe\xed\xfa",
             b"\xcf\xfa\xed\xfe",
             b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
-            b"%PDF-",
+            _PDF_MAGIC,
             b"PK\x03\x04",
             b"PK\x05\x06",
             b"PK\x07\x08",
@@ -315,6 +323,11 @@ def _extract_bytes(
             )
         return ExtractionResult(kind="image", width=width, height=height)
 
+    if data.startswith(_PDF_MAGIC):
+        return ExtractionResult(kind="pdf")
+    if data.startswith(_DOCX_MAGIC):
+        return ExtractionResult(kind="docx")
+
     declared_kind = _validate_declared_type(filename, declared_mime)
     if declared_kind != "text":
         raise AttachmentError(
@@ -385,6 +398,143 @@ def _validate_download_url(url: str) -> None:
         )
 
 
+async def _extract_document_worker(
+    path: Path,
+    kind: str,
+    limits: AttachmentLimits,
+    prompt_chars: int,
+    lock_path: str | None,
+    deadline: float,
+) -> ExtractionResult:
+    """Run the untrusted document parser in one short-lived interpreter.
+
+    A configured lock is deliberately mandatory: the production services share
+    a small VPS and only one document parser may exist host-wide.  Unit callers
+    may pass ``None`` to avoid POSIX-only infrastructure.
+    """
+    lock_fd: int | None = None
+    process: asyncio.subprocess.Process | None = None
+    try:
+        if lock_path is not None:
+            if not lock_path or os.name != "posix":
+                raise AttachmentError("Document parsing is unavailable.", code="document_lock")
+            try:
+                import fcntl
+
+                flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+                lock_fd = os.open(lock_path, flags)
+                if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+                    raise OSError("document lock is not a regular file")
+                while True:
+                    try:
+                        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        if _remaining(deadline) <= 0:
+                            raise _timeout_error()
+                        await asyncio.sleep(min(0.05, _remaining(deadline)))
+            except OSError as exc:
+                raise AttachmentError("Document parsing is unavailable.", code="document_lock") from exc
+        remaining = _remaining(deadline)
+        if remaining <= 0:
+            raise _timeout_error()
+        output_chars = max(1, min(limits.max_extracted_chars, prompt_chars))
+        request = {
+            "path": str(path), "kind": kind,
+            "max_pages": limits.max_pages,
+            "max_entries": limits.max_archive_entries,
+            "max_uncompressed": limits.max_archive_uncompressed_bytes,
+            "max_chars": output_chars,
+            "max_pdf_stream_bytes": min(4_194_304, limits.max_archive_uncompressed_bytes),
+        }
+        worker = Path(__file__).with_name("attachment_worker.py")
+        environment = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONIOENCODING": "utf-8"}
+        spawn_task = asyncio.create_task(
+            asyncio.create_subprocess_exec(
+                sys.executable,
+                "-I",
+                "-X",
+                "utf8",
+                str(worker),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=environment,
+                limit=65_536,
+            )
+        )
+        try:
+            process = await asyncio.wait_for(asyncio.shield(spawn_task), timeout=remaining)
+        except BaseException as exc:
+            # Shield process creation, then settle it before releasing the host
+            # lock. Cancellation or deadline expiry can otherwise leave a late
+            # child untracked while a second service acquires the lock.
+            while not spawn_task.done():
+                try:
+                    await asyncio.shield(spawn_task)
+                except asyncio.CancelledError:
+                    continue
+                except BaseException:
+                    break
+            if spawn_task.done() and not spawn_task.cancelled():
+                try:
+                    process = spawn_task.result()
+                except BaseException:
+                    process = None
+            if isinstance(exc, asyncio.TimeoutError):
+                raise _timeout_error() from exc
+            if isinstance(exc, OSError):
+                raise AttachmentError(
+                    "The document parser could not start.",
+                    code="document_parse",
+                ) from exc
+            raise
+        try:
+            remaining = _remaining(deadline)
+            if remaining <= 0:
+                raise _timeout_error()
+            stdout, _ = await asyncio.wait_for(
+                process.communicate(json.dumps(request).encode("utf-8")),
+                timeout=remaining,
+            )
+        except asyncio.TimeoutError as exc:
+            raise _timeout_error() from exc
+        if len(stdout) > 65_536 or process.returncode != 0:
+            raise AttachmentError("The document could not be read.", code="document_parse")
+        try:
+            result = json.loads(stdout.decode("utf-8"))
+            text, truncated = _clean_text(str(result["text"]), output_chars)
+            pages = int(result.get("page_count", 0))
+        except (ValueError, KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise AttachmentError("The document could not be read.", code="document_parse") from exc
+        if not text:
+            raise AttachmentError("The document has no usable text.", code="empty_text")
+        return ExtractionResult(kind=kind, text=text, page_count=pages, truncated=bool(result.get("truncated")) or truncated)
+    except BaseException:
+        if process is not None and process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            wait_task = asyncio.create_task(process.wait())
+            while not wait_task.done():
+                try:
+                    await asyncio.shield(wait_task)
+                except asyncio.CancelledError:
+                    continue
+                except BaseException:
+                    break
+            if not wait_task.cancelled():
+                wait_task.result()
+        raise
+    finally:
+        if lock_fd is not None:
+            try:
+                os.close(lock_fd)
+            except OSError:
+                pass
+
+
 class AttachmentProcessor:
     def __init__(
         self,
@@ -402,6 +552,7 @@ class AttachmentProcessor:
         extractor: Callable[..., ExtractionResult] = extract_document,
         isolate_extractor: bool | None = None,
         parser_command: Sequence[str] | None = None,
+        document_lock_path: str | None = None,
     ) -> None:
         # Keep constructor compatibility while deliberately dropping cache,
         # chunking, FTS, parser-process and image-cache behavior.
@@ -415,6 +566,9 @@ class AttachmentProcessor:
         self.image_analyzer = image_analyzer
         self.extractor = extractor
         del image_cache_namespace, isolate_extractor, parser_command
+        # None keeps direct unit callers portable; production passes the
+        # configured POSIX lock path and fails closed if it cannot be used.
+        self.document_lock_path = document_lock_path
         self._semaphore = asyncio.Semaphore(max(1, int(concurrency)))
         self._active_jobs = 0
         self._peak_active_jobs = 0
@@ -447,6 +601,21 @@ class AttachmentProcessor:
         if remaining <= 0:
             raise _timeout_error()
         try:
+            preliminary = _extract_bytes(
+                data,
+                filename=filename,
+                declared_mime=declared_mime,
+                limits=self.limits,
+            )
+            if preliminary.kind in {"pdf", "docx"}:
+                return await _extract_document_worker(
+                    path,
+                    preliminary.kind,
+                    self.limits,
+                    self.prompt_chars,
+                    self.document_lock_path,
+                    deadline,
+                )
             if self.extractor is extract_document:
                 return await asyncio.wait_for(
                     asyncio.to_thread(
@@ -601,6 +770,7 @@ class AttachmentProcessor:
         self._active_jobs += 1
         self._peak_active_jobs = max(self._peak_active_jobs, self._active_jobs)
         try:
+            confidence: float | None = None
             try:
                 remaining = _remaining(deadline)
                 if remaining <= 0:
@@ -664,6 +834,12 @@ class AttachmentProcessor:
                         height=result.height,
                         truncated=truncated,
                     )
+                    raw_confidence = float(analysis.confidence)
+                    confidence = (
+                        max(0.0, min(1.0, raw_confidence))
+                        if math.isfinite(raw_confidence)
+                        else None
+                    )
             except AttachmentError:
                 self._failed_jobs += 1
                 raise
@@ -679,6 +855,7 @@ class AttachmentProcessor:
                 width=result.width,
                 height=result.height,
                 truncated=result.truncated or len(result.text) > self.prompt_chars,
+                confidence=confidence,
             )
         finally:
             self._active_jobs -= 1

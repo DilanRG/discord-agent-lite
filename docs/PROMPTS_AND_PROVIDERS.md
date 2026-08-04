@@ -31,10 +31,11 @@ flag. Only the ID is authoritative; aliases are context metadata.
 2. A private continuity block containing bounded profile/journal/relationship
    context.
 3. User-owned explicit memories for the current scope.
-4. Native alternating recent history and bounded lexical recall.
-5. Quoted reply context and current-turn attachment text/caption, if admitted.
+4. Native alternating recent history; each user turn keeps authored `message`
+   text separate from optional labelled `attachment_evidence`.
+5. Bounded lexical recall and quoted reply context.
 6. A final `RUNTIME VERIFIED DISCORD TURN` block containing the current author
-   identity JSON and message.
+   identity JSON, authored message, and any current labelled attachment evidence.
 7. The card's complete post-history instructions plus a fixed delivery cue.
 
 Context fitting removes older optional material first. The current verified
@@ -99,8 +100,9 @@ transport, timeout, empty, malformed, and truncated outcomes, and cancels
 accepted jobs within a bounded cleanup interval when needed.
 
 The same client submits supported images to Horde Alchemist's
-`/interrogate/async` endpoint for a fallible caption. Captions are current-turn
-context and are never treated as OCR or durable memory.
+`/interrogate/async` endpoint for a fallible caption. Bounded captions may be
+retained as parent-linked evidence but are never treated as precise OCR,
+authored user statements, instructions, or direct profile facts.
 
 ## Adaptive router
 

@@ -204,7 +204,7 @@ class SettingsTests(unittest.TestCase):
 
                 with self.subTest(contract="lightweight attachments"):
                     self.assertLessEqual(settings.attachment_concurrency, 2)
-                    self.assertLessEqual(settings.attachment_max_count, 3)
+                    self.assertLessEqual(settings.attachment_max_count, 2)
                     self.assertGreater(settings.attachment_max_extracted_chars, 0)
                     self.assertGreater(settings.attachment_max_pixels, 0)
                     self.assertEqual(settings.attachment_timeout_seconds, 60.0)

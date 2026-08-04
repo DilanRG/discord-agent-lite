@@ -272,8 +272,9 @@ class AgentCommands(commands.Cog):
             value=(
                 "Your Discord account ID and available names, current message, character card, "
                 "bounded recent conversation, relevant profile/journal context, and supported "
-                "current attachments are sent to an AI Horde Scribe worker. Compact "
-                "profile/journal reflections use the same service."
+                "labelled attachment evidence are sent to an AI Horde Scribe worker. Compact "
+                "profile/journal reflections may include parent-linked attachment evidence and "
+                "use the same service."
             ),
             inline=False,
         )
@@ -282,9 +283,10 @@ class AgentCommands(commands.Cog):
             value=(
                 "Attachments are processed only when the bot has admitted a response. "
                 "Supported images are sent to a community Alchemist worker for a fallible "
-                "caption; small UTF-8 text, Markdown, and common source files are read locally. "
-                "Raw temporary files are deleted after the current turn and attachment content "
-                "is not cached."
+                "caption; bounded UTF-8 text/code, text-bearing PDF, and DOCX are read locally. "
+                "Raw temporary files and CDN URLs are discarded. Bounded derived evidence may "
+                "be retained with an eligible conversation message or relationship event; raw "
+                "files, hashes, parser caches, chunks, and search indexes are not retained."
             ),
             inline=False,
         )
@@ -302,7 +304,11 @@ class AgentCommands(commands.Cog):
             value=(
                 "Conversation memory and agent-authored profile/journal continuity are "
                 "separate. Use `/memory search`, `/memory storage`, and `/memory forget` "
-                "for conversation memory. Profile and journal entries have no opt-out; "
+                "for conversation memory and its attachment evidence. Relationship-event "
+                "evidence follows the separate social lane even when conversation storage is "
+                "off, and is removed by `/profile reset`. Attachment text cannot issue commands, "
+                "authenticate anyone, establish direct profile facts, or request memory; only "
+                "your outer Discord message can do that. Profile and journal entries have no opt-out; "
                 "use private `/profile view`, `/profile facts`, `/profile journal`, "
                 "`/profile delete`, or `/profile reset` controls. Continued qualifying "
                 "interactions can create new observations after deletion or reset."
@@ -468,7 +474,7 @@ class AgentCommands(commands.Cog):
         description="Enable or disable future conversation-memory storage for you",
     )
     @app_commands.describe(
-        enabled="When false, conversation messages and explicit memories are not stored"
+        enabled="When false, messages, their attachment evidence, and explicit memories are not stored"
     )
     async def storage(self, interaction: discord.Interaction, enabled: bool) -> None:
         guild_id = interaction.guild_id or 0
@@ -477,8 +483,9 @@ class AgentCommands(commands.Cog):
             (
                 "Conversation-memory storage enabled."
                 if enabled
-                else "Conversation-memory storage disabled; existing conversation memory "
-                "was not deleted. Internal profile/journal continuity remains active."
+                else "Conversation-memory storage disabled; new messages, their attachment "
+                "evidence, and explicit memories will not be stored. Existing conversation "
+                "memory was not deleted. Internal profile/journal continuity remains active."
             ),
             ephemeral=True,
         )

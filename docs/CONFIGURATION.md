@@ -79,19 +79,23 @@ initial seeds and do not overwrite saved SQLite settings.
 | `MAX_INPUT_CHARS` | `3500` | Integer `256..16000`; current Discord text bound. |
 | `MAX_REPLY_CHARS` | `1800` | Integer `128..1950`; final Discord content bound. |
 | `MAX_ATTACHMENT_BYTES` | `5242880` | Integer `1024..20000000`; per attachment byte ceiling (5 MiB default). |
-| `MAX_ATTACHMENT_CHARS` | `6000` | Integer `256..16000`; decoded current-turn text bound. |
-| `ATTACHMENT_MAX_COUNT` | `2` | Integer `1..3` per admitted message. |
-| `ATTACHMENT_MAX_EXTRACTED_CHARS` | `100000` | Integer `1000..1000000`; extraction ceiling. |
+| `MAX_ATTACHMENT_CHARS` | `6000` | Integer `256..16000`; model and durable-evidence text bound. |
+| `ATTACHMENT_MAX_COUNT` | `2` | Integer `1..2` per admitted message. |
+| `ATTACHMENT_MAX_EXTRACTED_CHARS` | `6000` | Integer `1000..1000000`; extraction-work ceiling before the model/persistence cut. |
 | `ATTACHMENT_MAX_PIXELS` | `16777216` | Integer `1024..100000000`; image pixel ceiling. |
 | `ATTACHMENT_TIMEOUT_SECONDS` | `60` | Float `1..60`; one deadline shared by the message's attachment work. |
 | `ATTACHMENT_CONCURRENCY` | `1` | Integer `1..2`; attachment lane semaphore. |
+| `ATTACHMENT_DOCUMENT_LOCK_PATH` | `/run/lock/agent-lite-attachments.lock` | Shared POSIX `flock` path; required for production PDF/DOCX parsing. |
 | `ALCHEMIST_API_KEY` | `0000000000` | Anonymous fallback; use a separate user key for higher priority. |
 | `ALCHEMIST_ENABLED` | `true` | Boolean; supported images otherwise receive no caption. |
 
-The active attachment lane accepts bounded UTF-8 text/code and PNG, JPEG, or
-WebP. It does not parse PDFs, Office files, archives, executables, or arbitrary
-URLs. Raw temporary bytes, decoded text, and captions are current-turn data;
-they are not cached or indexed.
+The active attachment lane accepts bounded UTF-8 text/code, text-bearing PDF
+and DOCX, and PNG/JPEG/WebP. Raw bytes are temporary and no attachment cache,
+chunk table, or FTS index is active. Bounded structured evidence may be stored
+with an eligible parent message or relationship event; it follows that
+parent's memory/privacy/reset lifecycle. Other Office formats, archives,
+executables, scanned/encrypted documents, malformed packages, and arbitrary
+URLs fail closed.
 
 ## Conversation memory
 
@@ -152,7 +156,9 @@ cooldown by itself never authorizes a chained bot post.
 2. Use absolute paths in systemd and mode `0600` for the environment file.
 3. Set explicit attachment/Alchemist values when migrating from an older
    deployment whose environment may contain retired overrides.
-4. Start once, then configure channels with `/agent channel`; saved rows win
+4. Install the document-worker tmpfiles rule/group before starting the supplied
+   systemd unit; an inaccessible configured lock intentionally fails closed.
+5. Start once, then configure channels with `/agent channel`; saved rows win
    over seed lists.
-5. Use `/agent status` to inspect provider selection, current/peak RSS,
+6. Use `/agent status` to inspect provider selection, current/peak RSS,
    active attachment counters, storage counts, and pending reflections.

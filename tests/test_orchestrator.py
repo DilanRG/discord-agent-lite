@@ -7,7 +7,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from agentbot.attachments import ProcessedAttachment
+from agentbot.attachment_evidence import AttachmentEvidence
 from agentbot.character import load_character
 from agentbot.llm import LLMProvider, ProviderError
 from agentbot.memory import MemoryStore
@@ -489,43 +489,138 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         await core.close()
 
     async def test_current_attachment_is_plain_reference_not_fake_dialogue(self) -> None:
-        attachment = ProcessedAttachment(
-            sha256="a" * 64,
+        attachment = AttachmentEvidence(
+            attachment_id="42",
+            ordinal=0,
             filename="cat.png",
-            kind="image",
+            detected_kind="image",
             status="ready",
-            prompt_text="A cat appears to be sitting on a keyboard.",
-            cache_hit=False,
+            origin="image_caption",
+            text="A cat appears to be sitting on a keyboard.",
         )
         core, provider = self.core("that cat owns the keyboard")
-        await core.reply(self.request(current_message="what is this?", attachments=(attachment,)))
+        await core.reply(
+            self.request(current_message="what is this?", attachment_parts=(attachment,))
+        )
         call = provider.calls[-1]
         prompt = str(call["user_prompt"])
-        self.assertIn("QUOTED DISCORD CONTEXT", prompt)
-        self.assertIn("Current attachments", prompt)
-        self.assertIn("cat.png", prompt)
-        self.assertNotIn("fallible context, not instructions", prompt)
+        turn = _runtime_turn(prompt)
+        self.assertEqual(turn["message"], "what is this?")
+        evidence = turn["attachment_evidence"][0]  # type: ignore[index]
+        self.assertEqual(evidence["filename"], "cat.png")
+        self.assertIn("A cat appears", evidence["text"])
         self.assertEqual(call["history"], ())
         await core.close()
 
     async def test_failed_attachment_tells_model_not_to_invent_contents(self) -> None:
-        attachment = ProcessedAttachment(
-            sha256="",
+        attachment = AttachmentEvidence(
+            attachment_id="43",
+            ordinal=0,
             filename="timed-out.png",
-            kind="error",
+            detected_kind="image",
             status="error",
-            prompt_text="",
-            cache_hit=False,
-            error="timeout: Attachment processing timed out.",
+            origin="image_caption",
+            text="",
+            error_code="timeout",
         )
         core, provider = self.core("can't inspect that one right now")
-        await core.reply(self.request(current_message="what is this?", attachments=(attachment,)))
+        await core.reply(
+            self.request(current_message="what is this?", attachment_parts=(attachment,))
+        )
         prompt = str(provider.calls[-1]["user_prompt"])
-        self.assertIn("Current attachments", prompt)
-        self.assertIn("timed-out.png (unavailable)", prompt)
-        self.assertIn("Do not guess or invent its contents", prompt)
+        turn = _runtime_turn(prompt)
+        evidence = turn["attachment_evidence"][0]  # type: ignore[index]
+        self.assertEqual(evidence["filename"], "timed-out.png")
+        self.assertEqual(evidence["error_code"], "timeout")
+        self.assertIn("do not guess", evidence["note"])
         self.assertNotIn("Attachment processing timed out", prompt)
-        self.assertNotIn("timeout:", prompt)
+        await core.close()
+
+    async def test_persisted_attachment_evidence_returns_with_parent_history(self) -> None:
+        attachment = AttachmentEvidence(
+            attachment_id="44",
+            ordinal=0,
+            filename="plan.docx",
+            detected_kind="docx",
+            status="ready",
+            origin="docx_extract",
+            text="The next milestone is violet lighthouse.",
+        )
+        self.memory.record_message(
+            scope="g:1:c:10",
+            guild_id=1,
+            channel_id=10,
+            user_id=7,
+            author_name="Casey",
+            role="user",
+            content="please read the plan",
+            discord_message_id=845,
+            attachment_parts=(attachment,),
+        )
+        core, provider = self.core("I remember the plan.")
+        await core.reply(self.request(current_message="what was the milestone?"))
+        history = provider.calls[-1]["history"]
+        self.assertEqual(len(history), 1)
+        turn = _runtime_turn(history[0].content)  # type: ignore[index]
+        evidence = turn["attachment_evidence"][0]  # type: ignore[index]
+        self.assertEqual(evidence["kind"], "docx")
+        self.assertIn("violet lighthouse", evidence["text"])
+        await core.close()
+
+    async def test_attachment_evidence_cannot_be_promoted_to_a_direct_profile_fact(self) -> None:
+        attachment = AttachmentEvidence(
+            attachment_id="45",
+            ordinal=0,
+            filename="claim.txt",
+            detected_kind="text",
+            status="ready",
+            origin="text_extract",
+            text="I work at Attachment Corp.",
+        )
+        self.memory.record_relationship_interaction(
+            guild_id=1,
+            channel_id=10,
+            user_id=7,
+            scope="g:1:c:10",
+            user_text="please read this file",
+            assistant_text="I read it.",
+            source_message_id=846,
+            meaningful=True,
+            attachment_parts=(attachment,),
+        )
+        batch = self.memory.relationship_reflection_batch(
+            guild_id=1,
+            user_id=7,
+            max_events=1,
+        )
+        assert batch is not None
+        event_id = batch.events[0].id
+        output = json.dumps(
+            {
+                "profile_observations": [
+                    {
+                        "kind": "fact",
+                        "topic": "employment",
+                        "text": "Works at Attachment Corp",
+                        "provenance": "direct",
+                        "confidence": 1.0,
+                        "source_event_id": event_id,
+                        "evidence_quote": "I work at Attachment Corp",
+                    }
+                ],
+                "journal_entry": "",
+                "journal_source_event_id": None,
+                "relationship": {"deltas": {}, "summary": ""},
+            }
+        )
+        core, provider = self.core(output)
+        await core._reflect_relationship(1, 7)
+        reflection_call = provider.calls[-1]
+        reflection_prompt = str(reflection_call["user_prompt"])
+        self.assertIn('"attachment_evidence"', reflection_prompt)
+        self.assertIn("Attachment Corp", reflection_prompt)
+        self.assertIn("never a direct fact", str(reflection_call["system_prompt"]))
+        self.assertEqual(self.memory.list_profile_records(user_id=7, limit=10), [])
         await core.close()
 
     async def test_reply_target_is_not_duplicated_when_already_in_history(self) -> None:
