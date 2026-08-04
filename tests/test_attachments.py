@@ -167,6 +167,26 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("legacy", result.prompt_text)
         self.assertEqual(len(calls), 3)
 
+    async def test_image_signature_is_authoritative_over_discord_metadata(self) -> None:
+        calls: list[bytes] = []
+
+        async def analyze(data: bytes) -> ImageAnalysis:
+            calls.append(data)
+            return ImageAnalysis(caption="the uploaded screenshot shows a bot profile")
+
+        payload = _png(2, 2)
+        result = await self.processor(analyzer=analyze).process_bytes(
+            payload,
+            filename="image.png",
+            declared_mime="image/webp",
+            source=self.source,
+        )
+
+        self.assertEqual(result.kind, "image")
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.prompt_text, "the uploaded screenshot shows a bot profile")
+        self.assertEqual(calls, [payload])
+
     async def test_image_signature_pixel_limit_and_analyzer_availability_are_enforced(self) -> None:
         async def analyze(data: bytes) -> ImageAnalysis:
             del data
