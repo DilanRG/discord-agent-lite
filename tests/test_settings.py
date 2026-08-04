@@ -103,9 +103,11 @@ class SettingsTests(unittest.TestCase):
                 Path(directory),
                 HORDE_API_KEY="text-shared-key",
                 ALCHEMIST_API_KEY="0000000000",
+                RELATIONSHIP_DIRECT_ONLY="true",
             ) as settings:
                 self.assertEqual(settings.horde_api_key, "text-shared-key")
                 self.assertEqual(settings.alchemist_api_key, "0000000000")
+                self.assertTrue(settings.relationship_direct_only)
 
     def test_alchemist_does_not_inherit_a_text_shared_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -133,7 +135,7 @@ class SettingsTests(unittest.TestCase):
             ) as settings:
                 with self.subTest(contract="social memory"):
                     self.assertTrue(settings.relationships_enabled)
-                    self.assertTrue(settings.relationship_direct_only)
+                    self.assertFalse(settings.relationship_direct_only)
                     self.assertFalse(hasattr(settings, "social_namespace"))
                     self.assertGreaterEqual(settings.relationship_meaningful_chars, 80)
                     self.assertGreaterEqual(
@@ -204,7 +206,7 @@ class SettingsTests(unittest.TestCase):
 
                 with self.subTest(contract="lightweight attachments"):
                     self.assertLessEqual(settings.attachment_concurrency, 2)
-                    self.assertLessEqual(settings.attachment_max_count, 3)
+                    self.assertLessEqual(settings.attachment_max_count, 2)
                     self.assertGreater(settings.attachment_max_extracted_chars, 0)
                     self.assertGreater(settings.attachment_max_pixels, 0)
                     self.assertEqual(settings.attachment_timeout_seconds, 60.0)

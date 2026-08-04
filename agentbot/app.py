@@ -18,6 +18,11 @@ import discord
 from discord.ext import commands, tasks
 
 from . import CLIENT_AGENT
+from .attachment_evidence import (
+    AttachmentEvidence,
+    explicit_memory_references_attachment,
+    saved_attachment_memory_text,
+)
 from .attachments import (
     AttachmentError,
     AttachmentLimits,
@@ -53,6 +58,58 @@ _QUESTION_STARTS = (
     "who ", "what ", "when ", "where ", "why ", "how ", "which ",
     "can ", "could ", "would ", "should ", "do ", "does ", "did ", "is ", "are ",
 )
+_EVIDENCE_KINDS = frozenset({"image", "text", "pdf", "docx"})
+
+
+def _attachment_kind_from_metadata(filename: str, declared_mime: str) -> str:
+    suffix = "." + filename.casefold().rsplit(".", 1)[-1] if "." in filename else ""
+    mime = declared_mime.partition(";")[0].strip().casefold()
+    if suffix in {".png", ".jpg", ".jpeg", ".jpe", ".webp"} or mime.startswith("image/"):
+        return "image"
+    if suffix == ".pdf" or mime == "application/pdf":
+        return "pdf"
+    if suffix == ".docx" or "wordprocessingml.document" in mime:
+        return "docx"
+    return "text"
+
+
+def _attachment_evidence(
+    message: discord.Message,
+    processed: tuple[ProcessedAttachment, ...],
+    *,
+    max_count: int,
+) -> tuple[AttachmentEvidence, ...]:
+    evidence: list[AttachmentEvidence] = []
+    uploads = tuple(message.attachments[:max_count])
+    for ordinal, (upload, item) in enumerate(zip(uploads, processed)):
+        kind = (
+            item.kind
+            if item.kind in _EVIDENCE_KINDS
+            else _attachment_kind_from_metadata(upload.filename, upload.content_type or "")
+        )
+        origin = {
+            "image": "image_caption",
+            "text": "text_extract",
+            "pdf": "pdf_extract",
+            "docx": "docx_extract",
+        }[kind]
+        evidence.append(
+            AttachmentEvidence(
+                attachment_id=str(upload.id),
+                ordinal=ordinal,
+                filename=item.filename or upload.filename,
+                detected_kind=kind,
+                status=item.status if item.status in {"ready", "error"} else "error",
+                origin=origin,
+                text=item.prompt_text if item.status == "ready" else "",
+                confidence=item.confidence if item.status == "ready" else None,
+                truncated=item.truncated,
+                error_code=(item.error.partition(":")[0] or "unavailable")
+                if item.status != "ready"
+                else "",
+            )
+        )
+    return tuple(evidence)
 
 
 def _consume_shutdown_task(task: asyncio.Task[Any]) -> None:
@@ -192,12 +249,13 @@ class AgentBot(commands.Bot):
             memory=self.memory,
             limits=AttachmentLimits(
                 max_bytes=self.settings.max_attachment_bytes,
-                max_extracted_chars=self.settings.attachment_max_extracted_chars,
-                # Retained constructor fields for the legacy document parser;
-                # the lean text/image extractor never consumes them.
-                max_pages=1,
-                max_archive_entries=1,
-                max_archive_uncompressed_bytes=1,
+                max_extracted_chars=min(
+                    self.settings.attachment_max_extracted_chars,
+                    self.settings.max_attachment_chars,
+                ),
+                max_pages=32,
+                max_archive_entries=128,
+                max_archive_uncompressed_bytes=16_777_216,
                 max_pixels=self.settings.attachment_max_pixels,
                 timeout_seconds=self.settings.attachment_timeout_seconds,
             ),
@@ -208,6 +266,7 @@ class AgentBot(commands.Bot):
             chunk_overlap=0,
             prompt_chars=self.settings.max_attachment_chars,
             concurrency=self.settings.attachment_concurrency,
+            document_lock_path=self.settings.attachment_document_lock_path,
             image_analyzer=(
                 self._analyze_image if self.alchemist_client is not None else None
             ),
@@ -659,6 +718,11 @@ class AgentBot(commands.Bot):
                     persist=not opted_out,
                     privacy_revision=privacy_revision,
                 )
+                attachment_parts = _attachment_evidence(
+                    message,
+                    attachments,
+                    max_count=self.settings.attachment_max_count,
+                )
                 current_input = clean_input(
                     base_content
                     or (
@@ -708,15 +772,27 @@ class AgentBot(commands.Bot):
                         content=current_input,
                         discord_message_id=message.id,
                         created_at=int(message.created_at.timestamp()),
+                        attachment_parts=attachment_parts,
                     )
                     explicit_memory = extract_explicit_memory(base_content)
                     if explicit_memory:
-                        self.memory.add_memory(
-                            guild_id=guild_id,
-                            user_id=message.author.id,
-                            text=explicit_memory,
-                            source_message_id=stored_id,
-                        )
+                        if explicit_memory_references_attachment(explicit_memory):
+                            attachment_memory = saved_attachment_memory_text(attachment_parts)
+                            if attachment_memory:
+                                self.memory.add_memory(
+                                    guild_id=guild_id,
+                                    user_id=message.author.id,
+                                    text=attachment_memory,
+                                    kind="user_asserted_attachment",
+                                    source_message_id=stored_id,
+                                )
+                        else:
+                            self.memory.add_memory(
+                                guild_id=guild_id,
+                                user_id=message.author.id,
+                                text=explicit_memory,
+                                source_message_id=stored_id,
+                            )
 
                 request = ReplyRequest(
                     scope=scope,
@@ -742,6 +818,7 @@ class AgentBot(commands.Bot):
                     reply_author_is_bot=reply_author_is_bot,
                     conversation_type="dm" if message.guild is None else "guild",
                     attachments=attachments,
+                    attachment_parts=attachment_parts,
                 )
                 try:
                     response = await self.core.reply(request)
@@ -800,7 +877,11 @@ class AgentBot(commands.Bot):
             profile_epoch_current = (
                 self.memory.profile_revision(message.author.id) == profile_revision
             )
-            relationship_input = base_content or "(addressed the agent without text)"
+            relationship_input = base_content or (
+                "(shared attachment evidence without authored message text)"
+                if attachment_parts
+                else "(addressed the agent without text)"
+            )
             social_meaningful = meaningful_social_event(
                 relationship_input,
                 response,
@@ -824,6 +905,7 @@ class AgentBot(commands.Bot):
                     source_message_id=message.id,
                     meaningful=social_meaningful,
                     created_at=sent_at,
+                    attachment_parts=attachment_parts,
                 )
                 self.core.maybe_schedule_relationship_reflection(
                     guild_id,

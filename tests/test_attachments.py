@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import struct
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from agentbot.attachments import (
     AttachmentError,
@@ -64,6 +67,59 @@ def _webp(width: int, height: int) -> bytes:
     )
 
 
+def _docx(
+    path: Path,
+    text: str = "cobalt plan",
+    *,
+    extra: dict[str, bytes] | None = None,
+) -> None:
+    content_types = (
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        "</Types>"
+    )
+    document = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("[Content_Types].xml", content_types)
+        archive.writestr("word/document.xml", document)
+        for name, payload in (extra or {}).items():
+            archive.writestr(name, payload)
+
+
+def _text_pdf(text: str) -> bytes:
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode("ascii")
+    objects = (
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream",
+    )
+    payload = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, body in enumerate(objects, 1):
+        offsets.append(len(payload))
+        payload.extend(f"{index} 0 obj\n".encode("ascii"))
+        payload.extend(body)
+        payload.extend(b"\nendobj\n")
+    xref = len(payload)
+    payload.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    payload.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        payload.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    payload.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(payload)
+
+
 class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.source = AttachmentSource(
@@ -81,6 +137,7 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
         limits: AttachmentLimits | None = None,
         analyzer=None,
         concurrency: int = 1,
+        prompt_chars: int = 60,
     ) -> AttachmentProcessor:
         return AttachmentProcessor(
             memory=self.memory,  # type: ignore[arg-type]
@@ -89,12 +146,12 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
             max_chunks_per_attachment=10,
             chunk_chars=120,
             chunk_overlap=10,
-            prompt_chars=60,
+            prompt_chars=prompt_chars,
             concurrency=concurrency,
             image_analyzer=analyzer,
         )
 
-    async def test_response_gate_and_utf8_source_text_are_bounded_current_turn_only(self) -> None:
+    async def test_response_gate_and_utf8_source_text_are_bounded_without_cache_writes(self) -> None:
         self.assertFalse(attachment_processing_admitted(False, 1))
         self.assertFalse(attachment_processing_admitted(True, 0))
         self.assertTrue(attachment_processing_admitted(True, 1))
@@ -115,16 +172,16 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.sha256), 64)
         self.assertEqual(processor.status()["cache_hits"], 0)
 
-    async def test_document_data_formats_binary_and_non_utf8_are_rejected(self) -> None:
+    async def test_unsupported_and_malformed_documents_are_rejected(self) -> None:
         processor = self.processor()
         cases = (
-            (b"%PDF-1.7", "notes.pdf", "application/pdf", "unsupported"),
-            (b"PK\x03\x04docx", "notes.docx", "application/octet-stream", "unsupported"),
+            (b"%PDF-1.7", "notes.pdf", "application/pdf", "document_parse"),
+            (b"PK\x03\x04docx", "notes.docx", "application/octet-stream", "document_parse"),
             (b"<p>hello</p>", "page.html", "text/html", "unsupported"),
             (b"<root>hello</root>", "data.xml", "application/xml", "unsupported"),
             (b"name: example", "data.yaml", "text/yaml", "unsupported"),
             (b"name,value", "data.csv", "text/csv", "unsupported"),
-            (b"%PDF-1.7", "disguised.txt", "text/plain", "binary"),
+            (b"%PDF-1.7", "disguised.txt", "text/plain", "document_parse"),
             (b"not utf8: \xff", "notes.txt", "text/plain", "encoding"),
         )
         for payload, filename, mime, expected_code in cases:
@@ -137,6 +194,249 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
                         source=self.source,
                     )
                 self.assertEqual(caught.exception.code, expected_code)
+
+    async def test_docx_runs_in_disposable_worker_without_a_production_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            document = Path(directory) / "notes.docx"
+            _docx(document)
+            result = await self.processor(
+                limits=_limits(max_archive_entries=8, max_archive_uncompressed_bytes=4096),
+            ).process_path(
+                document, filename="notes.docx",
+                declared_mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                source=self.source,
+            )
+        self.assertEqual(result.kind, "docx")
+        self.assertEqual(result.prompt_text, "cobalt plan")
+
+    async def test_text_pdf_runs_in_disposable_worker_and_bytes_are_authoritative(self) -> None:
+        result = await self.processor(
+            limits=_limits(
+                max_bytes=4096,
+                max_pages=2,
+                max_archive_uncompressed_bytes=4096,
+            ),
+        ).process_bytes(
+            _text_pdf("violet lighthouse"),
+            filename="misleading.txt",
+            declared_mime="text/plain",
+            source=self.source,
+        )
+        self.assertEqual(result.kind, "pdf")
+        self.assertIn("violet lighthouse", result.prompt_text)
+
+    async def test_docx_rejects_nested_packages_macros_entities_and_bounds(self) -> None:
+        cases = (
+            ({"word/embeddings/inner.docx": b"PK\x03\x04nested"}, "safe text", 8, 4096, "nested"),
+            ({"word/vbaProject.bin": b"macro"}, "safe text", 8, 4096, "macro"),
+            ({}, "<!DOCTYPE x><w:t>x</w:t>", 8, 4096, "entity"),
+            ({"extra.txt": b"x"}, "safe text", 2, 4096, "entries"),
+            ({"extra.txt": b"x" * 2048}, "safe text", 8, 1024, "expanded"),
+        )
+        for extra, text, max_entries, max_expanded, label in cases:
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                document = Path(directory) / "notes.docx"
+                _docx(document, text, extra=extra)
+                with self.assertRaises(AttachmentError) as caught:
+                    await self.processor(
+                        limits=_limits(
+                            max_bytes=4096,
+                            max_archive_entries=max_entries,
+                            max_archive_uncompressed_bytes=max_expanded,
+                        ),
+                    ).process_path(
+                        document,
+                        filename="notes.docx",
+                        declared_mime="application/octet-stream",
+                        source=self.source,
+                    )
+                self.assertEqual(caught.exception.code, "document_parse")
+
+    async def test_configured_document_lock_fails_closed_when_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            document = Path(directory) / "notes.docx"
+            _docx(document, "x")
+            processor = AttachmentProcessor(
+                memory=self.memory,  # type: ignore[arg-type]
+                limits=_limits(max_archive_entries=8),
+                max_cache_entries=1, max_chunks_per_attachment=1,
+                chunk_chars=1, chunk_overlap=0, prompt_chars=60, concurrency=1,
+                document_lock_path=str(Path(directory) / "missing" / "gate.lock"),
+            )
+            with self.assertRaises(AttachmentError) as caught:
+                await processor.process_path(
+                    document, filename="notes.docx", declared_mime="application/octet-stream", source=self.source,
+                )
+        self.assertEqual(caught.exception.code, "document_lock")
+
+    @unittest.skipUnless(os.name == "posix", "POSIX flock is Linux-only")
+    async def test_document_lock_wait_uses_the_existing_message_deadline(self) -> None:
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = Path(directory) / "notes.docx"
+            lock_path = Path(directory) / "attachments.lock"
+            _docx(document, "x")
+            lock_path.touch()
+            with lock_path.open("r+b") as held:
+                fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                processor = AttachmentProcessor(
+                    memory=self.memory,  # type: ignore[arg-type]
+                    limits=_limits(
+                        max_archive_entries=8,
+                        max_archive_uncompressed_bytes=4096,
+                        timeout_seconds=0.05,
+                    ),
+                    max_cache_entries=1,
+                    max_chunks_per_attachment=1,
+                    chunk_chars=1,
+                    chunk_overlap=0,
+                    prompt_chars=60,
+                    concurrency=1,
+                    document_lock_path=str(lock_path),
+                )
+                with self.assertRaises(AttachmentError) as caught:
+                    await processor.process_path(
+                        document,
+                        filename="notes.docx",
+                        declared_mime="application/octet-stream",
+                        source=self.source,
+                    )
+        self.assertEqual(caught.exception.code, "timeout")
+
+    async def test_cancellation_kills_and_reaps_the_disposable_worker(self) -> None:
+        started = asyncio.Event()
+
+        class HangingProcess:
+            returncode: int | None = None
+
+            def __init__(self) -> None:
+                self.killed = False
+                self.waited = False
+
+            async def communicate(self, payload: bytes) -> tuple[bytes, bytes]:
+                self.payload = payload
+                started.set()
+                await asyncio.Event().wait()
+                return b"", b""
+
+            def kill(self) -> None:
+                self.killed = True
+                self.returncode = -9
+
+            async def wait(self) -> int:
+                self.waited = True
+                return int(self.returncode or 0)
+
+        fake = HangingProcess()
+        with tempfile.TemporaryDirectory() as directory:
+            document = Path(directory) / "notes.docx"
+            _docx(document, "x")
+            processor = self.processor(
+                limits=_limits(max_archive_entries=8, max_archive_uncompressed_bytes=4096),
+            )
+            with patch(
+                "agentbot.attachments.asyncio.create_subprocess_exec",
+                return_value=fake,
+            ):
+                task = asyncio.create_task(
+                    processor.process_path(
+                        document,
+                        filename="notes.docx",
+                        declared_mime="application/octet-stream",
+                        source=self.source,
+                    )
+                )
+                await asyncio.wait_for(started.wait(), timeout=1)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+        self.assertTrue(fake.killed)
+        self.assertTrue(fake.waited)
+
+    async def test_cancellation_during_spawn_reaps_late_worker_before_return(self) -> None:
+        spawn_started = asyncio.Event()
+        release_spawn = asyncio.Event()
+
+        class LateProcess:
+            returncode: int | None = None
+
+            def __init__(self) -> None:
+                self.killed = False
+                self.waited = False
+
+            def kill(self) -> None:
+                self.killed = True
+                self.returncode = -9
+
+            async def wait(self) -> int:
+                self.waited = True
+                return int(self.returncode or 0)
+
+        fake = LateProcess()
+
+        async def delayed_spawn(*args, **kwargs):
+            del args, kwargs
+            spawn_started.set()
+            await release_spawn.wait()
+            return fake
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = Path(directory) / "notes.docx"
+            _docx(document, "x")
+            processor = self.processor(
+                limits=_limits(max_archive_entries=8, max_archive_uncompressed_bytes=4096),
+            )
+            with patch(
+                "agentbot.attachments.asyncio.create_subprocess_exec",
+                side_effect=delayed_spawn,
+            ):
+                task = asyncio.create_task(
+                    processor.process_path(
+                        document,
+                        filename="notes.docx",
+                        declared_mime="application/octet-stream",
+                        source=self.source,
+                    )
+                )
+                await asyncio.wait_for(spawn_started.wait(), timeout=1)
+                task.cancel()
+                await asyncio.sleep(0)
+                self.assertFalse(task.done())
+                release_spawn.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+        self.assertTrue(fake.killed)
+        self.assertTrue(fake.waited)
+
+    async def test_document_worker_protocol_accepts_maximum_unicode_and_escaping(self) -> None:
+        fixtures = (
+            "\U0001f642" * 16_000,
+            ((chr(34) + chr(92)) * 8_000),
+        )
+        for expected in fixtures:
+            with self.subTest(prefix=expected[:2]):
+                with tempfile.TemporaryDirectory() as directory:
+                    document = Path(directory) / "notes.docx"
+                    _docx(document, expected)
+                    processor = self.processor(
+                        limits=_limits(
+                            max_bytes=200_000,
+                            max_extracted_chars=16_000,
+                            max_archive_entries=8,
+                            max_archive_uncompressed_bytes=200_000,
+                            timeout_seconds=5,
+                        ),
+                        prompt_chars=16_000,
+                    )
+                    result = await processor.process_path(
+                        document,
+                        filename="notes.docx",
+                        declared_mime="application/octet-stream",
+                        source=self.source,
+                    )
+                self.assertEqual(result.prompt_text, expected)
+                self.assertFalse(result.truncated)
 
     async def test_png_jpeg_and_webp_use_caption_only(self) -> None:
         calls: list[bytes] = []
@@ -167,6 +467,26 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("legacy", result.prompt_text)
         self.assertEqual(len(calls), 3)
 
+    async def test_image_signature_is_authoritative_over_discord_metadata(self) -> None:
+        calls: list[bytes] = []
+
+        async def analyze(data: bytes) -> ImageAnalysis:
+            calls.append(data)
+            return ImageAnalysis(caption="the uploaded screenshot shows a bot profile")
+
+        payload = _png(2, 2)
+        result = await self.processor(analyzer=analyze).process_bytes(
+            payload,
+            filename="image.png",
+            declared_mime="image/webp",
+            source=self.source,
+        )
+
+        self.assertEqual(result.kind, "image")
+        self.assertEqual(result.status, "ready")
+        self.assertEqual(result.prompt_text, "the uploaded screenshot shows a bot profile")
+        self.assertEqual(calls, [payload])
+
     async def test_image_signature_pixel_limit_and_analyzer_availability_are_enforced(self) -> None:
         async def analyze(data: bytes) -> ImageAnalysis:
             del data
@@ -174,7 +494,7 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(AttachmentError) as mismatch:
             await self.processor(analyzer=analyze).process_bytes(
-                _png(2, 2),
+                b"this is not image data",
                 filename="image.jpg",
                 declared_mime="image/jpeg",
                 source=self.source,
@@ -234,17 +554,25 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
                 self.calls.append((url, allow_redirects, timeout))
                 return Response(self.blocks)
 
-        session = Session((b"Discord ", b"attachment"))
-        processor = self.processor(limits=_limits(max_bytes=32))
+        analyzer_calls: list[bytes] = []
+
+        async def analyze(data: bytes) -> ImageAnalysis:
+            analyzer_calls.append(data)
+            return ImageAnalysis(caption="downloaded screenshot")
+
+        payload = _png(2, 2)
+        session = Session((payload[:12], payload[12:]))
+        processor = self.processor(limits=_limits(max_bytes=64), analyzer=analyze)
         result = await processor.process_url(
             session,  # type: ignore[arg-type]
-            "https://cdn.discordapp.com/attachments/1/2/notes.txt?ex=signed",
-            filename="notes.txt",
-            declared_mime="text/plain",
-            declared_size=18,
+            "https://cdn.discordapp.com/attachments/1/2/image.png?ex=signed",
+            filename="image.png",
+            declared_mime="image/webp",
+            declared_size=len(payload),
             source=self.source,
         )
-        self.assertEqual(result.prompt_text, "Discord attachment")
+        self.assertEqual(result.prompt_text, "downloaded screenshot")
+        self.assertEqual(analyzer_calls, [payload])
         self.assertFalse(session.calls[0][1])
 
         for invalid in (

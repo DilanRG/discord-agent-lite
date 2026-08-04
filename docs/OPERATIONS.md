@@ -39,6 +39,24 @@ write restrictions. Its default memory pressure/hard ceiling is 90/120 MiB
 with a 64-task limit. These are containment limits, not proof that every live
 workload fits; observe the service after deployment.
 
+PDF/DOCX parsing also requires the shared lock declared by
+`deploy/agent-lite-attachments.conf`. Install it before starting a unit that
+uses the supplied `SupplementaryGroups` setting:
+
+```bash
+groupadd --system agentliteattachments  # only when the group does not exist
+usermod --append --groups agentliteattachments discordbot
+install -o root -g root -m 0644 deploy/agent-lite-attachments.conf \
+  /etc/tmpfiles.d/agent-lite-attachments.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/agent-lite-attachments.conf
+stat /run/lock/agent-lite-attachments.lock
+```
+
+Add each independently deployed bot account to that same group only when its
+unit supports document parsing. The runtime opens the pre-created file and
+fails closed when the path/group/lock is unavailable; it never falls back to
+ungated document workers.
+
 Inspect health and resource state with:
 
 ```bash
@@ -63,7 +81,7 @@ new processes against one SQLite file concurrently.
 The v1.1 migration selects exactly one legacy identity by the configured card
 filename stem. It fails closed on mismatch or ambiguity, preserves IDs and
 high-water marks, and applies current retention/provenance filters. A v1.1
-binary cannot read schema-7 tables; rollback therefore requires restoring the
+binary cannot read schema-8 tables; rollback therefore requires restoring the
 complete pre-migration database backup, not copying selected tables.
 
 For a versioned release, stage and verify the complete manifest and dependency
@@ -82,10 +100,11 @@ higher even when application logging is `DEBUG`; gateway debug payloads can
 contain complete message content.
 
 The remote provider is a separate data processor. A normal admitted reply can
-send current text, bounded context, identity metadata, and current-turn
-attachment text/caption. Reflection sends bounded direct pairs without
-attachments or quoted reply context. Alchemist receives supported image bytes
-for a fallible caption. `/privacy` is the user-facing disclosure.
+send current text, bounded context, identity metadata, and labelled attachment
+evidence. Reflection sends bounded direct pairs plus eligible attachment
+evidence under a stricter non-authority cue; quoted reply context is excluded.
+Alchemist receives supported image bytes for a fallible caption. `/privacy` is
+the user-facing disclosure.
 
 ## Troubleshooting
 
@@ -113,9 +132,11 @@ stored tail. Cooldown expiration alone cannot create a chain.
 ### Attachments are unavailable
 
 Confirm the URL is an exact Discord CDN attachment with no redirect, the
-declared type/signature agree, the file is supported UTF-8/PNG/JPEG/WebP, and
-the byte/pixel/time limits are sufficient. An unavailable marker is safer than
-guessing. Reattach on a later admitted message to retry transient work.
+actual bytes identify supported UTF-8/PNG/JPEG/WebP/PDF/DOCX, and the
+byte/pixel/page/archive/time limits are sufficient. For PDF/DOCX also verify
+the shared lock file, service supplementary group, pinned `pypdf`, and worker
+exit/resource diagnostics. An unavailable marker is safer than guessing.
+Reattach on a later admitted message to retry transient work.
 
 ### Profile state looks wrong
 

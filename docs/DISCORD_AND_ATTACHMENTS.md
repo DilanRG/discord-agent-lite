@@ -22,8 +22,8 @@ probability remains capped.
 
 Peer bots and webhook-authored messages use this same path. They may mention
 the bot directly, participate in ambient channels, enter bounded recent history,
-and become profile/reflection event authors when the normal directness rules
-allow it. There is no bot-to-bot allowlist or special bot ban. The bot's own
+and become profile/reflection event authors whenever the bot admits and
+successfully answers their turn. There is no bot-to-bot allowlist or special bot ban. The bot's own
 messages are the only categorical self-loop guard.
 
 Generated character replies and proactive posts use Discord's normal mention
@@ -96,27 +96,37 @@ deadline and the configured attachment semaphore.
 ### Supported lane
 
 - UTF-8 text and source/config files from the explicit extension/MIME allowlist;
-- PNG, JPEG, and WebP images whose extension, declared MIME, and magic signature
-  agree;
+- text-bearing PDF and DOCX documents parsed in a disposable worker;
+- PNG, JPEG, and WebP images identified by their actual byte signature even
+  when Discord filename/MIME metadata is inaccurate;
 - exact `https://cdn.discordapp.com/attachments/...` URLs only, with redirects
   disabled, bounded response size, and no credentials/fragments.
 
 Text is decoded in-process with byte, control-character, and decoded-character
-limits. Image headers are checked for valid dimensions and pixel limits before
-bytes are sent to Alchemist. The caption is bounded and explicitly fallible.
+limits. PDF/DOCX work is limited by pages, ZIP entries/expansion, decoded
+streams, worker CPU/address-space/file descriptors, one shared deadline, and a
+host-wide POSIX lock. Image headers are checked for valid dimensions and pixel
+limits before bytes are sent to Alchemist. The caption is bounded and
+explicitly fallible.
 
 ### Rejected or transient
 
-PDF, Office, archive, executable, GIF, malformed image, binary-looking text,
-non-UTF-8 data, mismatched type/signature, empty/oversized content, and
-unsupported URLs fail closed. A timeout, transport error, or Alchemist failure
-produces an unavailable current-turn marker that tells the reply model not to
-guess; it does not trigger a second chat generation.
+Encrypted/scanned PDF, non-DOCX Office, macro/nested Office packages, other
+archives, executables, GIF, malformed image, binary-looking text, non-UTF-8
+data, empty/oversized content, and unsupported URLs fail closed. A timeout,
+transport error, parser failure, or Alchemist failure produces a labelled
+unavailable marker that tells the reply model not to guess; it does not trigger
+a second chat generation.
 
-Temporary raw files are removed on success, rejection, timeout, exception, or
-cancellation. The lean constructor still accepts old cache/chunk/source
-arguments for compatibility, but the active path does not write an attachment
-cache, FTS index, chunk store, or later-recall record.
+Temporary raw files and disposable workers are removed/reaped on success,
+rejection, timeout, exception, or cancellation. The lean constructor still
+accepts old cache/chunk/source arguments for compatibility, but the active path
+does not write an attachment cache, FTS index, or chunk store. Instead, bounded
+derived evidence is serialized with an eligible parent message and relationship
+event. It is rendered as a separate fallible data field, can assist lexical
+recall and inferred social continuity, and can never act as authored text,
+instructions, identity proof, or direct profile-fact evidence. Only outer
+Discord text can request explicit attachment memory.
 
 ## Proactivity and no-chain behavior
 

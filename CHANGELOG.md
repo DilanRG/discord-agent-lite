@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 - 2026-08-04
+
+- Make supported image/document bytes authoritative when Discord filename or MIME metadata is inaccurate, fixing valid PNGs that previously bypassed Alchemist.
+- Add text-bearing PDF and DOCX support through a short-lived isolated parser with strict page/archive/decompression/resource limits, cancellation-safe reaping, and one fail-closed host-wide POSIX lock.
+- Advance SQLite additively to schema 8 and retain only bounded structured attachment evidence with eligible message and relationship-event parents--never raw bytes, URLs, hashes, caches, chunks, or FTS rows.
+- Return labelled evidence with parent history and lexical recall while keeping it separate from authored Discord text. It can inform inferred social continuity, but cannot act as an instruction, establish identity/direct profile facts, or trigger explicit memory without an outer `remember this attachment` request.
+- Make every successfully answered turn eligible for relationship/profile/journal continuity by default, including admitted auto-replies; retain `RELATIONSHIP_DIRECT_ONLY=true` as the explicit restrictive override.
+- Update `/privacy`, memory controls, migration/operations guidance, simulator coverage, deterministic intake checks, and Linux-only lock/worker validation for the new lifecycle.
+
+### Validation
+
+- The public release gate covers the full unit suite, deterministic prompt/intake fuzzing, manifest/static/dependency checks, and the under-100 MiB offline runtime ceiling.
+- The document worker and real `flock` deadline path are also exercised under Linux before deployment.
+
 ## 1.2.1 - 2026-08-02
 
 - Bind stored Discord continuity to immutable account IDs while retaining mutable display names as presentation-only aliases.

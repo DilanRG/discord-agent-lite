@@ -24,7 +24,7 @@ Untrusted inputs:
 - Profile observations, journal entries, relationship deltas, and relationship summaries written by a model.
 - Provider output, including reflection JSON.
 
-An upgraded schema-7 database may also contain model-written rolling summaries and guild-continuity rows from older releases. Those dormant rows remain untrusted, but the lean runtime does not update them or place them in provider prompts. Relationship dimensions and the compact relationship summary are active social-continuity state and remain bounded, fallible, and non-authoritative.
+An upgraded schema-8 database may also contain model-written rolling summaries and guild-continuity rows from older releases. Those dormant rows remain untrusted, but the lean runtime does not update them or place them in provider prompts. Relationship dimensions, the compact relationship summary, and parent-linked attachment evidence are active continuity state and remain bounded, fallible, and non-authoritative.
 
 Untrusted runtime material is serialized as JSON in the provider's user-role payload. Discord display names are not interpolated into the trusted system prompt. AI Horde role delimiters are stripped from untrusted text before trusted role framing is added.
 
@@ -49,10 +49,10 @@ The normal reply prompt receives selected profile records, journal notes, and bo
 
 Automatic social reflection is intentionally narrower than ordinary conversation memory:
 
-- By default, only DMs and explicit mentions create profile/journal reflection events. A Discord reply counts as direct only when its reply `@` toggle is on; an admitted `@`-off reply is ambient.
+- By default, every turn the bot successfully answers creates a profile/journal reflection event for that author, including admitted auto-replies. Operators can set `RELATIONSHIP_DIRECT_ONLY=true` to restrict events to DMs, explicit mentions, and replies whose Discord `@` toggle is on.
 - An event is recorded only after a response was successfully sent.
 - The event contains the target user's own base message and the bot's response.
-- Attachments, quoted reply context, usernames, and passive third-party chatter are excluded. Any admitted author, including a peer bot or webhook, otherwise follows the same explicit-memory and profile/journal-reflection rules.
+- Quoted reply context, usernames, and passive third-party chatter are excluded. Ready attachment evidence may be included as a separately labelled fallible field for relationship deltas, journal notes, or inferred impressions. It can never support a direct fact/evidence quote, issue an instruction, or establish identity. Any admitted author, including a peer bot or webhook, otherwise follows the same explicit-memory and profile/journal-reflection rules.
 - Facts require clear first-person statements by the target user, a submitted source-event ID, and an exact first-person evidence quote found in that event.
 - Inferred impressions may describe supported recurring conversational style, social behavior, and subjective ordinary-human traits, but remain fallible and cannot become medical diagnoses or other high-stakes factual claims.
 - Every observation has a bounded topic, provenance, confidence, evidence count, status, and source context. Provider-supplied record links can mutate only active records of the same user, kind, and topic that were included in the reflection payload.
@@ -68,7 +68,7 @@ A hostile member can still create misleading statements about themselves. The re
 
 The reflection prompt may retain clearly disclosed intimate or controversial traits and supported subjective impressions. It does not impose a blanket moral-content or trait-category ban. Facts still require the target user's own clear first-person statement; inferred impressions retain inferred provenance and uncertainty.
 
-A deterministic post-filter rejects credential-shaped values, credential-bearing authorization headers, authentication/session cookies, tokens, private keys, password assignments, labeled financial/government identifiers, exact home-address/private-contact shapes, and instruction-shaped text, including instructions split across profile topic and body. Common Markdown, quote, bracket, blockquote, and list wrappers around labeled values are normalized only for this check. Ambiguous labels require a code-, digit-, email-, phone-, or recognized-header-shaped value, so ordinary prose about a pin, credentials, a mobile phone, or authorization is not discarded. Inferred medical diagnoses and high-stakes accusations are rejected without imposing a blanket ban on ordinary subjective impressions. Schema 7 rechecks pre-fix profile, journal, pending-event, relationship-summary, rolling-summary, and guild-continuity prose, and removes journal rows that are not first-person subjective notes. The runtime refuses to open a newer unknown schema rather than silently downgrading it and sanitizes Discord mentions. This is defense in depth rather than a complete DLP system; members should inspect and delete inaccurate or inappropriate rows.
+A deterministic post-filter rejects credential-shaped values, credential-bearing authorization headers, authentication/session cookies, tokens, private keys, password assignments, labeled financial/government identifiers, exact home-address/private-contact shapes, and instruction-shaped text, including instructions split across profile topic and body. Common Markdown, quote, bracket, blockquote, and list wrappers around labeled values are normalized only for this check. Ambiguous labels require a code-, digit-, email-, phone-, or recognized-header-shaped value, so ordinary prose about a pin, credentials, a mobile phone, or authorization is not discarded. Inferred medical diagnoses and high-stakes accusations are rejected without imposing a blanket ban on ordinary subjective impressions. Schema 7 rechecks pre-fix social prose; schema 8 adds bounded parent-linked attachment evidence without weakening direct-fact validation against outer authored `user_text`. The runtime refuses to open a newer unknown schema rather than silently downgrading it and sanitizes Discord mentions. This is defense in depth rather than a complete DLP system; members should inspect and delete inaccurate or inappropriate rows.
 
 The framework does not infer third-party profiles. Reflection events omit quoted content and are keyed to the message author.
 
@@ -104,15 +104,17 @@ A Sybil attack can still consume quota or fill the configured ceilings. Discord 
 - This bot's own messages remain ignored. Other bots and webhook-authored messages use the normal message path without a separate allowlist or bot-only limiter.
 - Peer bots and webhooks remain bounded by the ordinary per-author, per-channel, request-admission, concurrency, and channel-lock controls. Operational notices are not sent to bot-authored messages, avoiding non-character feedback chatter.
 - Attachments are considered only after a response passes the response-policy, rate-limit, global request-admission, and per-channel admission gates.
-- At most two attachments are processed by default, with a hard configurable maximum of three.
+- At most two attachments are processed, matching the durable evidence budget.
 - Only exact Discord CDN HTTPS hosts are fetched, redirects are disabled, and both declared and streamed byte counts are capped.
-- The active allowlist is bounded UTF-8 text/code plus PNG, JPEG, and WebP. Text extensions must carry a compatible text/application MIME type; image extension, declared MIME, and magic signature must agree.
-- PDFs, Office documents, archives, executables, GIFs, malformed images, mismatched types, binary-looking text, and every other unsupported format fail closed.
-- Text is decoded in-process under byte and decoded-character ceilings. Image headers are inspected only for type and pixel bounds before the bytes are sent to Alchemist. There is no document parser, parser subprocess, attachment cache, chunk store, FTS index, or later attachment retrieval in the active lane.
-- One absolute deadline covers download, internal waits, UTF-8 decoding, and Alchemist across the whole admitted attachment list. Transient deadline, transport, and Alchemist failures may be attempted again only when a later admitted message supplies the attachment again.
-- Attachment work and Horde generation intentionally emit no Discord typing indicator. Failed attachments contribute only a generic unavailable marker instructing the reply model not to guess their contents; transport details are retained in diagnostics rather than exposed in the prompt.
+- The active allowlist is bounded UTF-8 text/code, text-bearing PDF/DOCX, and PNG/JPEG/WebP. Supported image/document byte signatures are authoritative over inaccurate Discord filename/MIME metadata; image-declared non-images and unsupported binary/text combinations still fail closed.
+- Encrypted/scanned PDFs, macro or nested Office packages, non-DOCX ZIPs, other archives, executables, GIFs, malformed images/documents, binary-looking text, and every other unsupported format fail closed.
+- Text and images stay in-process. PDF/DOCX parsing runs in a fresh isolated interpreter with page, ZIP-entry/expansion, XML, decompression-stream, CPU, address-space, file-descriptor, protocol-output, and service-cgroup limits. One pre-created POSIX `flock` permits only one document worker host-wide; a configured missing/inaccessible lock fails closed.
+- The launcher uses a fixed `sys.executable -I -X utf8 attachment_worker.py` argument vector, a scrubbed environment, no shell, bounded JSON I/O, and kill/reap cleanup for timeout, cancellation, or exceptional exit. The release gate AST-checks this sole process primitive.
+- One absolute deadline covers download, semaphore/host-lock waits, UTF-8/document extraction, and Alchemist across the whole admitted attachment list. Transient failures may be attempted again only when a later admitted message supplies the attachment again.
+- One Discord typing context covers admitted attachment work and Horde generation. Failed attachments contribute only a generic unavailable marker plus diagnostic error code, instructing the reply model not to guess; detailed transport/parser text is not exposed in the prompt.
 - Raw downloads exist only in a private temporary directory and are removed on success, rejection, timeout, error, or cancellation.
-- Image captions are fallible current-turn context and are never represented as precise OCR. Only a turn whose final fitted context still contains a nonempty caption receives image guidance. Caption content remains in the untrusted reference JSON, and the reply prompt asks the character to hedge uncertain visual details briefly.
+- Bounded derived evidence may be stored with an eligible parent message and relationship event, but raw bytes, CDN URLs, hashes, caches, chunks, and FTS data are never retained by the active lane. Evidence is a distinct JSON field, not authored text or an instruction. It follows parent pruning/deletion/reset.
+- Image captions are fallible and are never represented as precise OCR. Caption evidence remains labelled and non-authoritative in current or later parent context.
 - Provider connections use one small shared pool.
 - Provider requests have deadlines, response-size ceilings, and at most one different-model attempt after a typed transient failure.
 - The normal chat delivery boundary strips control tags, hidden-reasoning tags, leading speaker labels, trailing forged role turns, tightly recognized instruction-acknowledgement/transcript envelopes, and excess length. It deliberately preserves the usable character message, ordinary prose, emphasis, slang, fictional detail, character voice, and Discord mention syntax.
@@ -122,11 +124,11 @@ A Sybil attack can still consume quota or fill the configured ceilings. Discord 
 
 ## Remote-provider boundary
 
-Normal replies send the current message and bounded relevant context to the configured text provider. Decoded text and image captions from attachments on that current turn are included only as untrusted JSON; no stored attachment text is retrieved. Proactive messages and profile/journal reflection also send bounded context.
+Normal replies send the current message and bounded relevant context to the configured text provider. Current, recent, and lexically recalled parent messages may carry separately labelled bounded attachment evidence as untrusted JSON. Authored `message` text and `attachment_evidence` are distinct fields. Proactive messages and profile/journal reflection also send bounded context.
 
 When Alchemist is enabled, supported images on admitted responses are base64-encoded and sent to the configured AI Horde `/interrogate/async` endpoint. Captioning always runs; optional interrogation tags are off by default. Community Scribe and Alchemist worker operators may receive submitted data and may have their own logging or retention practices. `/privacy` discloses this boundary in Discord.
 
-Profile/journal reflection sends completed direct user/assistant pairs by default. The provider does not receive attachments or quoted reply context through that path, but an ordinary directly requested reply may receive bounded attachment content or a caption as untrusted JSON.
+Profile/journal reflection sends completed successfully answered user/assistant pairs plus bounded ready attachment evidence by default. The provider does not receive raw attachments or quoted reply context through that path. Its system contract permits evidence only for relationship deltas, journal notes, and inferred impressions; direct facts still require an exact first-person quote from outer authored `target_user_said`.
 
 The lean runtime sends no rolling-summary, guild-continuity, or tuning-metric provider job. Related schema rows and parsers exist only for migration, rollback, and deletion compatibility.
 
@@ -147,9 +149,10 @@ Explicit-memory scope:
 
 Attachment scope:
 
-- Newly uploaded bytes, decoded UTF-8 text, and Alchemist captions are transient current-turn data. They are not cached, indexed, linked into social state, or available to a later turn.
+- Newly uploaded bytes and CDN URLs are transient. Bounded structured derived evidence may be stored with an eligible conversation message and separately with an eligible relationship event; it returns only through that parent's scope/lifecycle.
+- Evidence can assist lexical recall and inferred social continuity, but cannot execute commands, establish identity, count as authored user text/direct fact evidence, or trigger explicit memory. Only outer Discord text such as `remember this attachment` can request a bounded `user_asserted_attachment` memory.
 - Temporary raw files are private to the admitted request and are deleted after success, rejection, timeout, error, or cancellation.
-- Upgraded schema-7 databases can retain legacy attachment/cache tables for cleanup compatibility. The lean attachment path does not read or write them; deletion commands still clean legacy rows created by older releases.
+- Upgraded schema-8 databases can retain legacy attachment/cache tables for cleanup compatibility. The active path does not read or write them; deletion commands still clean legacy rows created by older releases.
 
 Social scope:
 
@@ -159,7 +162,7 @@ Public guild profile/journal observations can support continuity across guilds f
 
 Dormant compatibility state:
 
-- Upgraded schema-7 databases may retain rolling summaries, guild events/continuity, anonymous interaction metrics, and attachment cache/chunks written by older releases.
+- Upgraded schema-8 databases may retain rolling summaries, guild events/continuity, anonymous interaction metrics, and attachment cache/chunks written by older releases.
 - The current app gives the superseded group, metric, and attachment lanes zero capacity, schedules no background work for them, and never supplies their rows to a provider prompt.
 - Profile reset, conversation-memory forget, migration, and pruning keep bounded cleanup paths for their own legacy rows. Cleanup counts shown by a command describe old stored data, not current feature activity.
 
@@ -167,11 +170,11 @@ Dormant compatibility state:
 
 `/memory storage enabled:false`:
 
-- Prevents future conversation-message and explicit-memory updates for that user in the current guild/DM.
-- Can still process a supported new attachment transiently on a directly requested reply; the lean lane does not read or write an attachment cache.
+- Prevents future conversation-message, conversation attachment-evidence, and explicit-memory updates for that user in the current guild/DM.
+- Can still process a supported new attachment on an admitted turn the bot answers; eligible relationship-event evidence remains in the separate social lane, while the active path still never writes an attachment cache/chunk/FTS row.
 - Does not delete existing conversation memory.
 - Does not disable, delete, or suppress the separate agent-authored profile, journal, relationship event, or reflection state.
-- Does not prevent transient provider processing when the user directly requests a reply.
+- Does not prevent transient provider processing when the bot admits and answers the turn.
 
 `/profile delete`:
 
@@ -181,20 +184,20 @@ Dormant compatibility state:
 `/profile reset confirm:true`:
 
 - Cancels every active profile/journal reflection task for the user.
-- Deletes the user's global profile records, relationship row, journal rows, pending events, and reflection-scheduling state.
+- Deletes the user's global profile records, relationship row, journal rows, pending events and their attachment evidence, and reflection-scheduling state.
 - Increments one global profile revision without changing any conversation-memory preference or revision.
 - Does not delete explicit memories or messages.
-- Does not create an opt-out. Later qualifying interactions can rebuild profile and journal continuity.
+- Does not create an opt-out. Later successfully answered interactions can rebuild profile and journal continuity.
 
 `/memory forget confirm:true`:
 
-- Deletes the user's conversation rows and explicit memories in the current guild/DM.
+- Deletes the user's conversation rows, their attachment evidence, and explicit memories in the current guild/DM.
 - Deletes or invalidates associated dormant summary and attachment-source rows from pre-lean releases in that guild/DM.
 - Increments the current-scope revision so an in-flight conversation-memory write cannot recreate deleted data.
 - Does not change the future conversation-memory storage preference.
 - Does not delete or suppress global profile, journal, pending-reflection, relationship, or guild-continuity state.
 
-Profile, journal, and relationship continuity is agent-authored internal state, not user-authored memory. It has private view, typed-delete, and reset controls, but no opt-out or suppression list. Continued qualifying interaction can create new observations after deletion/reset; simply not interacting with the agent prevents new direct-only events. Reflection batches capture the global profile revision before provider work, and transactional saves fail after a delete/reset so stale work cannot resurrect deleted state. Conversation-memory writes use a separate current-scope revision. Community Scribe processing of bounded social context remains disclosed above.
+Profile, journal, and relationship continuity is agent-authored internal state, not user-authored memory. It has private view, typed-delete, and reset controls, but no opt-out or suppression list. Continued answered interaction can create new observations after deletion/reset; simply not interacting with the agent prevents new events. Reflection batches capture the global profile revision before provider work, and transactional saves fail after a delete/reset so stale work cannot resurrect deleted state. Conversation-memory writes use a separate current-scope revision. Community Scribe processing of bounded social context remains disclosed above.
 
 ## Blacklist and deletion access
 
@@ -202,7 +205,7 @@ Configured blacklist entries cannot use normal agent commands or trigger ordinar
 
 ## Host hardening
 
-Run the agent under a dedicated unprivileged account with a restrictive umask, no Linux capabilities, no privilege escalation, a constrained filesystem view, and explicit task and memory ceilings. Keep the environment file, character card, database, logs, and backups access-controlled and outside the source tree. Patch the OS and Python dependencies, and do not run the service as root.
+Run the agent under a dedicated unprivileged account with a restrictive umask, no Linux capabilities, no privilege escalation, a constrained filesystem view, and explicit task and memory ceilings. Pre-create the document-worker lock as a root-owned regular file in a non-writable directory, and grant only the dedicated `agentliteattachments` group access; every local bot that may parse documents must share that lock. Document workers remain inside their parent service cgroup, so retain measured memory/task ceilings with enough headroom for one worker. Keep the environment file, character card, database, logs, and backups access-controlled and outside the source tree. Patch the OS and Python dependencies, and do not run the service as root.
 
 ## Logging
 

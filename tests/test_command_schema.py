@@ -167,7 +167,7 @@ class CommandSchemaTests(unittest.TestCase):
             with self.subTest(handler=handler_name):
                 response = self._handler_strings(handler_name).casefold()
                 self.assertIn(
-                    "later qualifying interactions may rebuild agent continuity",
+                    "later successfully answered interactions may rebuild agent continuity",
                     response,
                 )
 
@@ -240,7 +240,7 @@ class StatusCommandTests(unittest.IsolatedAsyncioTestCase):
         bot = SimpleNamespace(
             memory=SimpleNamespace(stats=lambda: stats),
             provider=SimpleNamespace(status=lambda: provider_status),
-            character=SimpleNamespace(name="Mika"),
+            character=SimpleNamespace(name="Test Character"),
             attachment_processor=None,
         )
 

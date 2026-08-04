@@ -1,6 +1,6 @@
 # Developer documentation
 
-This directory is the code-level reference for Discord Agent Lite 1.2.1. The
+This directory is the code-level reference for Discord Agent Lite 1.3.0. The
 [root README](../README.md) remains the quick-start and user-behavior guide;
 `SECURITY.md` is the normative security/privacy policy; and `MIGRATION.md` is
 the normative schema and upgrade guide.

@@ -1,6 +1,6 @@
 # Migration guide
 
-Discord Agent Lite 1.2 upgrades 1.1 social storage to one global social identity per Discord user and one configured bot identity per process. Back up `data/agent.db`, `.env`, and character cards before starting. Do not run old and new bot processes against the same SQLite file.
+Discord Agent Lite 1.3.0 retains the 1.2 social-storage migration and additively advances attachment evidence to schema 8. Back up `data/agent.db`, `.env`, and character cards before starting. Do not run old and new bot processes against the same SQLite file.
 
 ## From Discord Agent Lite 1.1
 
@@ -19,13 +19,23 @@ Keep the existing database and replace the application files. On first startup, 
 
 Recent messages, explicit memories, channel settings, proactivity state, conversation-memory storage preferences, and rolling-summary compaction positions are preserved; pre-v6 summary prose is revalidated as described below.
 
-Historical Phase 3 and Phase 4 candidates advanced SQLite to schema versions 4 and 5, adding attachment/cache/FTS and guild-continuity/tuning tables. Version 1.2 keeps those additive tables readable for migration, status counts, deletion, and rollback compatibility, but the lean runtime does not populate them, retrieve from them for later chat, or place their contents in prompts. Current attachments are bounded current-turn UTF-8/code extraction and transient Alchemist image captions only; PDFs, Office files, archives, persistent attachment caching, FTS later-recall, guild continuity, and automatic router tuning remain inactive.
+Historical Phase 3 and Phase 4 candidates advanced SQLite to schema versions 4 and 5, adding attachment/cache/FTS and guild-continuity/tuning tables. Version 1.2 kept those additive tables readable for migration, status counts, deletion, and rollback compatibility while leaving them inactive. The current lean attachment design still does not populate or retrieve those cache/chunk/FTS tables; it stores only bounded structured evidence on active parent rows.
 
 The dev8 startup upgrade advanced SQLite to schema version 6 and revalidated prose written before the then-current persistence checks. Unsafe pre-fix profile and journal rows were removed; unsafe relationship, rolling-summary, and guild-continuity summaries were blanked; and unsafe pending relationship/guild event fields were replaced with explicit omission markers. Rolling `through_message_id` remained intact so quarantined content was not reintroduced by replay. Valid rows were retained and normalized. That cleanup also ran immediately after a v1.1 social migration. Version 6 was the dev8 ceiling; dev24's schema-7 rule below supersedes it.
 
 Dev21 remains schema 6 and additively creates a small global `profile_state` revision table. Existing `privacy.opted_out` values are retained strictly as per-guild/DM conversation-memory preferences; they no longer suppress profile/journal observation or reflection. Profile delete/reset advances the independent global profile revision, while memory storage/forget advances only the current-scope conversation revision. Existing profile/journal data is preserved, but social state erased by an older broad forget cannot be reconstructed retroactively.
 
 Dev24 advances SQLite to schema version 7. The existing global relationship row becomes active conversational continuity: its eight numeric dimensions are globally keyed to the Discord user, while its free-text summary is supplied only in DMs. Startup revalidates every retained journal row and removes notes that are unsafe or not short first-person subjective continuity. New reflection output binds every observation and journal note to an actual submitted event; direct facts additionally require an exact first-person quote from that event. A database reporting a schema version newer than 7 is rejected before schema DDL instead of being downgraded.
+
+The attachment-evidence release advances SQLite additively to schema version 8.
+It adds `attachment_parts_json TEXT NOT NULL DEFAULT '[]'` to `messages` and
+`relationship_events`; existing rows therefore decode as no evidence. The JSON
+contains only bounded derived evidence, never raw bytes, CDN URLs, hashes,
+caches, chunks, or FTS data. Conversation evidence follows message deletion and
+conversation-memory controls; relationship evidence follows social-event
+pruning and `/profile reset`. A database reporting a schema version newer than
+8 is rejected before schema DDL instead of being downgraded. Restoring an older
+binary requires the complete matching pre-upgrade database backup.
 
 ### Selecting the legacy identity
 
@@ -41,9 +51,11 @@ Startup logs the selected legacy identity before migration. Only that identity i
 
 ### Recommended Phase 1 settings
 
+Version 1.3 makes every successfully answered turn eligible for social continuity by default. Existing deployments that explicitly set `RELATIONSHIP_DIRECT_ONLY=true` keep the older restrictive behavior; change that value to `false` if admitted auto-replies should also become relationship/profile/journal events.
+
 ```dotenv
 RELATIONSHIPS_ENABLED=true
-RELATIONSHIP_DIRECT_ONLY=true
+RELATIONSHIP_DIRECT_ONLY=false
 RELATIONSHIP_REFLECT_EVERY=6
 RELATIONSHIP_MEANINGFUL_CHARS=220
 RELATIONSHIP_MEANINGFUL_EVENT_THRESHOLD=1
@@ -62,7 +74,7 @@ MAX_TOTAL_RELATIONSHIPS=5000
 
 Run `/agent status`, `/profile view`, and `/profile facts page:1` after startup. Continue through the reported pages to inspect every record. Profile IDs are typed, such as `profile:12`; journal IDs are `journal:7`.
 
-For the active attachment lane, run `/privacy` and inspect `/agent status`. The service environment may retain old `MAX_ATTACHMENT_BYTES`, `MAX_ATTACHMENT_CHARS`, or 15-second `ATTACHMENT_TIMEOUT_SECONDS` overrides; compare it with `.env.example` before expecting the current 5 MiB/6,000-character/60-second defaults. Add the active `ATTACHMENT_*` and `ALCHEMIST_*` settings explicitly when stable deployment behavior should not depend on defaults. Retired cache/FTS and `GROUP_*` settings should not be copied into a new 1.2 environment.
+For the active attachment lane, run `/privacy` and inspect `/agent status`. The service environment may retain old `MAX_ATTACHMENT_BYTES`, `MAX_ATTACHMENT_CHARS`, or 15-second `ATTACHMENT_TIMEOUT_SECONDS` overrides; compare it with `.env.example` before expecting the current 5 MiB/6,000-character/60-second defaults. Add the active `ATTACHMENT_*` and `ALCHEMIST_*` settings explicitly when stable deployment behavior should not depend on defaults. Retired cache/FTS and `GROUP_*` settings should not be copied into a new 1.3.0 environment.
 
 ### New identity and disclosure behavior
 
@@ -75,7 +87,7 @@ For the active attachment lane, run `/privacy` and inspect `/agent status`. The 
 
 ### Rollback
 
-Discord Agent Lite 1.1 cannot read the v2 social tables or schema-v4/v5/v6/v7 tables. Restore the complete pre-migration database backup before running v1.1. Do not attempt a partial table copy while either process is active.
+Discord Agent Lite 1.1 cannot read the v2 social tables or schema-v4/v5/v6/v7/v8 tables. Restore the complete pre-migration database backup before running v1.1. Do not attempt a partial table copy while either process is active.
 
 ## From an older custom bot
 
