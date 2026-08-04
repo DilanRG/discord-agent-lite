@@ -305,14 +305,8 @@ def _extract_bytes(
         raise AttachmentError("The attachment is empty.", code="empty")
     if len(data) > limits.max_bytes:
         raise AttachmentError("The attachment exceeds the configured size limit.", code="size")
-    declared_kind = _validate_declared_type(filename, declared_mime)
     detected_image = _image_kind(data)
-    if declared_kind != "text":
-        if detected_image != declared_kind:
-            raise AttachmentError(
-                "The image signature does not match its filename or MIME type.",
-                code="signature_mismatch",
-            )
+    if detected_image:
         width, height = _image_dimensions(data, detected_image)
         if width <= 0 or height <= 0 or width * height > limits.max_pixels:
             raise AttachmentError(
@@ -320,7 +314,14 @@ def _extract_bytes(
                 code="pixel_limit",
             )
         return ExtractionResult(kind="image", width=width, height=height)
-    if detected_image or _looks_binary_or_document(data) or b"\x00" in data:
+
+    declared_kind = _validate_declared_type(filename, declared_mime)
+    if declared_kind != "text":
+        raise AttachmentError(
+            "The image signature does not match its filename or MIME type.",
+            code="signature_mismatch",
+        )
+    if _looks_binary_or_document(data) or b"\x00" in data:
         raise AttachmentError("Binary data cannot be processed as text.", code="binary")
     try:
         decoded = data.decode("utf-8-sig", errors="strict")
@@ -517,7 +518,6 @@ class AttachmentProcessor:
     ) -> ProcessedAttachment:
         deadline = self._new_deadline() if _deadline is None else float(_deadline)
         _validate_download_url(url)
-        _validate_declared_type(filename, declared_mime)
         if declared_size < 0 or declared_size > self.limits.max_bytes:
             raise AttachmentError(
                 "The attachment exceeds the configured size limit.",

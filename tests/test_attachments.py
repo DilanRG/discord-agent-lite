@@ -194,7 +194,7 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(AttachmentError) as mismatch:
             await self.processor(analyzer=analyze).process_bytes(
-                _png(2, 2),
+                b"this is not image data",
                 filename="image.jpg",
                 declared_mime="image/jpeg",
                 source=self.source,
@@ -254,17 +254,25 @@ class AttachmentProcessorTests(unittest.IsolatedAsyncioTestCase):
                 self.calls.append((url, allow_redirects, timeout))
                 return Response(self.blocks)
 
-        session = Session((b"Discord ", b"attachment"))
-        processor = self.processor(limits=_limits(max_bytes=32))
+        analyzer_calls: list[bytes] = []
+
+        async def analyze(data: bytes) -> ImageAnalysis:
+            analyzer_calls.append(data)
+            return ImageAnalysis(caption="downloaded screenshot")
+
+        payload = _png(2, 2)
+        session = Session((payload[:12], payload[12:]))
+        processor = self.processor(limits=_limits(max_bytes=64), analyzer=analyze)
         result = await processor.process_url(
             session,  # type: ignore[arg-type]
-            "https://cdn.discordapp.com/attachments/1/2/notes.txt?ex=signed",
-            filename="notes.txt",
-            declared_mime="text/plain",
-            declared_size=18,
+            "https://cdn.discordapp.com/attachments/1/2/image.png?ex=signed",
+            filename="image.png",
+            declared_mime="image/webp",
+            declared_size=len(payload),
             source=self.source,
         )
-        self.assertEqual(result.prompt_text, "Discord attachment")
+        self.assertEqual(result.prompt_text, "downloaded screenshot")
+        self.assertEqual(analyzer_calls, [payload])
         self.assertFalse(session.calls[0][1])
 
         for invalid in (

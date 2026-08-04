@@ -150,11 +150,12 @@ def _cases() -> tuple[ExtractorCase, ...]:
         ExtractorCase("reject-binary", "binary.txt", "text/plain", b"alpha\x00beta", expected_error="binary"),
         ExtractorCase("reject-non-utf8", "encoded.txt", "text/plain", b"text \xff", expected_error="encoding"),
         ExtractorCase(
-            "reject-signature-mismatch",
+            "metadata-mismatch-png",
             "wrong.jpg",
             "image/jpeg",
             _png(1, 1),
-            expected_error="signature_mismatch",
+            expected_kind="image",
+            dimensions=(1, 1),
         ),
         ExtractorCase(
             "reject-pixel-limit",
