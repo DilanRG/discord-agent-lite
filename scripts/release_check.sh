@@ -203,6 +203,17 @@ for retired in (
 PY
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  RUN_MODE="$(git ls-files -s -- run.sh | awk '{print $1}')"
+  if [[ "$RUN_MODE" != "100755" ]]; then
+    echo "Release check failed: run.sh is not executable in the Git index." >&2
+    exit 1
+  fi
+elif [[ ! -x run.sh ]]; then
+  echo "Release check failed: archived run.sh is not executable." >&2
+  exit 1
+fi
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   RUNTIME_DATA="$(git ls-files '*.db' '*.sqlite' '*.sqlite3' '.env' | head -n 1)"
 else
   RUNTIME_DATA="$(find . -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name '.env' \) -print -quit)"
